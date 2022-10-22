@@ -9,7 +9,6 @@
 #include "stm32f4xx_hal.h"
 
 extern TIM_HandleTypeDef htim2;
-//extern DMA_HandleTypeDef hdma_tim2_ch2_ch4;
 
 uint8_t led_PWM_data[LED_BUFF_LEN];
 
@@ -69,21 +68,21 @@ void ws2812_rgb_to_buf(uint8_t red , uint8_t green, uint8_t blue, uint16_t pos)
 void ws2812_init(void)
 {
 	for (uint16_t i = 0; i < LED_BUFF_LEN; ++i)
-		led_PWM_data[i] = (i < DELAY_LEN) ? 0 : 30;
-	HAL_TIM_PWM_Start_DMA(&htim2, TIM_CHANNEL_2, (uint32_t*)led_PWM_data, LED_BUFF_LEN);
+		led_PWM_data[i] = (i < DELAY_LEN) ? 0 : 39;
+	HAL_TIM_PWM_Start_DMA(&htim2, TIM_CHANNEL_1, (uint32_t*)led_PWM_data, LED_BUFF_LEN);
 }
 /************************************************************************/
 /*        														        */
 /************************************************************************/
 void ws2812_start(void)
 {
-	HAL_TIM_PWM_Start_DMA(&htim2, TIM_CHANNEL_2, (uint32_t*)led_PWM_data, LED_BUFF_LEN);
+	HAL_TIM_PWM_Start_DMA(&htim2, TIM_CHANNEL_1, (uint32_t*)led_PWM_data, LED_BUFF_LEN);
 }
 /************************************************************************/
 /*        														        */
 /************************************************************************/
 void ws2812_stop(void)
 {
-	HAL_TIM_PWM_Stop_DMA(&htim2,TIM_CHANNEL_2);
+	HAL_TIM_PWM_Stop_DMA(&htim2,TIM_CHANNEL_1);
 }
 

@@ -64,8 +64,6 @@ void Error_Handler(void);
 #define LED_GPIO_Port GPIOC
 #define BUTTON_Pin GPIO_PIN_0
 #define BUTTON_GPIO_Port GPIOA
-#define LED_WS2812_Pin GPIO_PIN_1
-#define LED_WS2812_GPIO_Port GPIOA
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
