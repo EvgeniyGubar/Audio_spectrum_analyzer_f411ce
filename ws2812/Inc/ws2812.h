@@ -8,10 +8,14 @@
 #ifndef LIBS_WS2812_H_
 #define LIBS_WS2812_H_
 
-#include "stdio.h"
+#include "stm32f4xx_hal.h"
 
-#define HIGH 58
-#define LOW 30
+#define AMPL			20	//высота матрицы
+#define WIDTH			25	//ширина матрицы
+
+#define HIGH 80
+#define LOW 39
+
 #define BIT_IS_SET(reg, bit)	((reg & (1<<bit)) != 0)
 //#define ArrSize			5	//для отладки ADC
 #define NUM_OF_LED  	500	//количество диодов

@@ -6,11 +6,14 @@
  */
 
 #include "ws2812.h"
-#include "stm32f4xx_hal.h"
 
-extern TIM_HandleTypeDef htim2;
 
-uint8_t led_PWM_data[LED_BUFF_LEN];
+extern TIM_HandleTypeDef htim3;
+
+//uint8_t led_RGB_data[LED_BUFF_LEN] = {0};
+
+
+uint16_t led_PWM_data[LED_BUFF_LEN];
 
 /************************************************************************/
 /*    Функция конвертации HSV в RGB и последующее заполнение буфера     */
@@ -69,20 +72,20 @@ void ws2812_init(void)
 {
 	for (uint16_t i = 0; i < LED_BUFF_LEN; ++i)
 		led_PWM_data[i] = (i < DELAY_LEN) ? 0 : 39;
-	HAL_TIM_PWM_Start_DMA(&htim2, TIM_CHANNEL_1, (uint32_t*)led_PWM_data, LED_BUFF_LEN);
+	HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_2, (uint32_t*)led_PWM_data, LED_BUFF_LEN);
 }
 /************************************************************************/
 /*        														        */
 /************************************************************************/
 void ws2812_start(void)
 {
-	HAL_TIM_PWM_Start_DMA(&htim2, TIM_CHANNEL_1, (uint32_t*)led_PWM_data, LED_BUFF_LEN);
+	HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_2, (uint32_t*)led_PWM_data, LED_BUFF_LEN);
 }
 /************************************************************************/
 /*        														        */
 /************************************************************************/
 void ws2812_stop(void)
 {
-	HAL_TIM_PWM_Stop_DMA(&htim2,TIM_CHANNEL_1);
+	HAL_TIM_PWM_Stop_DMA(&htim3,TIM_CHANNEL_2);
 }
 
