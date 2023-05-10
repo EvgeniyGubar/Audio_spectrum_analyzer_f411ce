@@ -32,9 +32,7 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdio.h"
-#include "ws2812.h"
-#include "hundler.h"
+
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -52,8 +50,6 @@ extern "C" {
 
 /* USER CODE END EM */
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
@@ -66,6 +62,14 @@ void Error_Handler(void);
 #define LED_GPIO_Port GPIOC
 #define BUTTON_Pin GPIO_PIN_0
 #define BUTTON_GPIO_Port GPIOA
+#define TEST_Pin GPIO_PIN_2
+#define TEST_GPIO_Port GPIOA
+#define LCD_CS_Pin GPIO_PIN_0
+#define LCD_CS_GPIO_Port GPIOB
+#define LCD_DC_Pin GPIO_PIN_1
+#define LCD_DC_GPIO_Port GPIOB
+#define LCD_RES_Pin GPIO_PIN_2
+#define LCD_RES_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

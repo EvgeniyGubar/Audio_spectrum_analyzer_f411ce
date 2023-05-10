@@ -8,11 +8,15 @@
 #ifndef INC_HUNDLER_H_
 #define INC_HUNDLER_H_
 
-#include "main.h"
 #include "stm32f4xx_hal.h"
 
+#define FHT_LEN		1024
 
-void adc_init();
+uint8_t flag_data_processing;
+int16_t generate_fx[FHT_LEN];
+
+void fft_init();
 void timer_for_triggering_adc_init();
+void data_processing();
 
 #endif /* INC_HUNDLER_H_ */

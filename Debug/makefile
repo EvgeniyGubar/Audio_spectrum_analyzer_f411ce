@@ -10,7 +10,7 @@ RM := rm -rf
 # All of the sources participating in the build are defined here
 -include sources.mk
 -include ws2812/Src/subdir.mk
--include wff_fht/Src/subdir.mk
+-include st7789/subdir.mk
 -include Drivers/STM32F4xx_HAL_Driver/Src/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
@@ -63,8 +63,8 @@ all: main-build
 main-build: Audio_spectrum_analyzer_f411ce.elf secondary-outputs
 
 # Tool invocations
-Audio_spectrum_analyzer_f411ce.elf: $(OBJS) $(USER_OBJS) C:\STM_dev\Old_version_WS\Audio_spectrum_analyzer_f411ce\STM32F411CEUX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Audio_spectrum_analyzer_f411ce.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\STM_dev\Old_version_WS\Audio_spectrum_analyzer_f411ce\STM32F411CEUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Audio_spectrum_analyzer_f411ce.map" -Wl,--gc-sections -static -L"C:\STM_dev\Old_version_WS\Audio_spectrum_analyzer_f411ce\Drivers\CMSIS\Lib\GCC" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Audio_spectrum_analyzer_f411ce.elf: $(OBJS) $(USER_OBJS) D:\STM_projects\Audio_spectrum_analyzer_f411ce\STM32F411CEUX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "Audio_spectrum_analyzer_f411ce.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\STM_projects\Audio_spectrum_analyzer_f411ce\STM32F411CEUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Audio_spectrum_analyzer_f411ce.map" -Wl,--gc-sections -static -L"D:\STM_projects\Audio_spectrum_analyzer_f411ce\Drivers\CMSIS\Lib\GCC" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
