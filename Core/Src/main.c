@@ -1,6 +1,6 @@
 /* USER CODE BEGIN Header */
 /*
- * Анализатор может рабоать как с дисплеем, так и с адресными
+ * Анализатор может работать как с дисплеем, так и с адресными
  * светодиодами. Перед компиляцией необходимо определить дефайн
  *  tim2 - trigger_timer_for ADC 32кГц
  *  tim3 - PWM DMA WS2812
@@ -29,7 +29,6 @@
 #include "ws2812.h"
 #include "hundler.h"
 #include "st7789.h"
-#include "windowing.h"
 
 /* USER CODE END Includes */
 
@@ -40,8 +39,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
-		//#define WS2812		//Либо светодиоды, либо дисплей
 
 /* USER CODE END PD */
 
@@ -118,7 +115,8 @@ int main(void)
 #endif
 	fft_init();
 	timer_for_triggering_adc_init();
-//	generateSample(generate_fx, 31, 10000);
+//	generateSampleFloat(generate_fx, 500, 10);
+//	data_processing();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -127,18 +125,18 @@ int main(void)
 	{
 //		uint32_t delay, i;
 
-		if(flag_data_processing)
-		{
-			data_processing();
-		}
+		if (flag_data_processing) data_processing();
 
-//		if(HAL_GetTick()-delay > 100){
+		HAL_SuspendTick();
+//		if(HAL_GetTick()-delay > 10){
 //			delay = HAL_GetTick();
-//			generateSample(generate_fx, i, 10000);
-//			i += 125;
+//			generateSample(generate_fx, i, 512);
+//			applyHammingWindow(generate_fx);
+//			i += 1;
 //			if (i > 16000) {
 //				i = 0;
 //			}
+//			data_processing();
 //		}
     /* USER CODE END WHILE */
 

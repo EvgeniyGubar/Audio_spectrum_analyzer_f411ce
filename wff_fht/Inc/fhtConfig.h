@@ -46,7 +46,7 @@
 // to real dB value output scaling here.
 // Valid values are 64 (output range 0-64) or 128 (output range
 // 0-128)
-#define N_DB 64
+#define N_DB 128
 
 // Uncomment the following line to make the library use
 // PROGMEM (on AVR microcontrollers), otherwise the library

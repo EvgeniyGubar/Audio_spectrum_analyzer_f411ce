@@ -5,15 +5,14 @@
  *      Author: Evgeniy
  */
 
+#include "windows.h"
 #include "hundler.h"
 #include "ws2812.h"
 #include "stdio.h"
 #include "main.h"
 #include "st7789.h"
-//#include "fhtConfig.h"
-//#include "sampling.h"
-#include "windowing.h"
 #include "arm_math.h"
+
 
 
 extern ADC_HandleTypeDef hadc1;
@@ -32,7 +31,7 @@ int16_t adc_in_buf_1[FHT_LEN], adc_in_buf_2[FHT_LEN];
 float32_t fft_in_buf[FHT_LEN];
 float32_t fft_out_buf[FHT_LEN];
 
-
+int16_t fx[FHT_LEN];
 
 /************************************************************
  *				Инит функции ARM DSP FFT
@@ -79,11 +78,10 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 /************************************************************
  *
  ***********************************************************/
-float complexABS(float real, float compl)
-{
-	return sqrtf(real * real + compl * compl);
-}
-
+//float complexABS(float real, float compl)
+//{
+//	return sqrtf(real * real + compl * compl);
+//}
 /**************************************************************
  *			Семпл сохранен - колбек по завершению
  **************************************************************/
@@ -100,9 +98,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, RESET);
 			for (uint16_t i = 0; i < FHT_LEN; ++i)
 			{
-				fft_in_buf[i] = adc_in_buf_1[i] - 2048; // << 4) - 16383;	//делаем двуполярный сигнал и масштабируем до +/- 16383
+				fft_in_buf[i] = adc_in_buf_1[i] - 2047;
 			}
-			applyHammingWindow(fft_in_buf);
 		}
 		else
 		{
@@ -111,24 +108,11 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, RESET);
 			for (uint16_t i = 0; i < FHT_LEN; ++i)
 			{
-				fft_in_buf[i] = adc_in_buf_2[i] - 2048; // << 4 ) - 16383;	//делаем двуполярный сигнал и масштабируем до +/- 16383
+				fft_in_buf[i] = adc_in_buf_2[i] - 2047;
 			}
-			applyHammingWindow(fft_in_buf);
 		}
-
-
-		arm_rfft_fast_f32(&fft_struct, (float32_t*) &fft_in_buf, (float32_t*) &fft_out_buf, 0);
-
-		flag_data_processing = 1;
 	}
-}
-
-/************************************************************
- *
- ***********************************************************/
-void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
-{
-	printf("Error conversion \r\n");
+	flag_data_processing = 1;
 }
 
 /************************************************************
@@ -136,33 +120,39 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
  ***********************************************************/
 void data_processing()
 {
-	flag_data_processing = 0;
-
-	int freqs[FHT_LEN / 2];
-	int freqpoint = 0;
-	int offset = 0;	//variable noisefloor offset
-
-	//calculate abs values and linear-to-dB
-	for (int i = 0; i < FHT_LEN; i += 2)
+	if (HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin) == 0)
 	{
-		freqs[freqpoint] = (int) (20*log10f(complexABS(fft_out_buf[i], fft_out_buf[i + 1]))) - offset;
-		if (freqs[freqpoint] < 0) freqs[freqpoint] = 0;
-		freqpoint++;
+		for (uint16_t i = 0; i < ST7789_HEIGHT; ++i)
+		{
+			ST7789_DrawLine_for_Analyzer(i, fft_in_buf[i] / 32);
+		}
 	}
-
-//	for(uint16_t i = 0; i < ST7789_HEIGHT; ++i)
-//	{
-//		ST7789_DrawLine_for_Analyzer(i, fft_in_buf[i] / 32);
-//	}
-
-	for (uint16_t i = 0; i < ST7789_HEIGHT; ++i)
+	else
 	{
-		ST7789_DrawLine_for_Analyzer(i, freqs[i]);
+		int freqs[FHT_LEN / 2];
+		int offset = 0;	//variable noisefloor offset
+
+		applyHammingWindowFloat(fft_in_buf);
+		arm_rfft_fast_f32(&fft_struct, (float32_t*) &fft_in_buf, (float32_t*) &fft_out_buf, 0);
+		arm_cmplx_mag_f32(fft_out_buf, fft_out_buf, FHT_LEN);
+
+		for (int i = 0; i < FHT_LEN / 2; ++i)
+		{
+//			freqs[i] = (int) (20 * (log10f(fft_out_buf[i]))) - offset;
+			freqs[i] = (int) (fft_out_buf[i]) >> 12;
+//			freqs[freqpoint] = (int) (20*log10f(complexABS(fft_out_buf[i], fft_out_buf[i + 1]))) - offset;
+			if (freqs[i] < 0) freqs[i] = 0;
+		}
+		for (uint16_t i = 0; i < 160; ++i)
+		{
+			ST7789_DrawLine_for_Analyzer(i, freqs[i]);
+		}
 	}
 	ST7789_SendFrame();
 
 	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, SET);
 
+	flag_data_processing = 0;
 
 #ifdef WS2812
 	static uint8_t amplitude[25];

@@ -13,7 +13,6 @@
 #define FHT_LEN		1024
 
 uint8_t flag_data_processing;
-int16_t generate_fx[FHT_LEN];
 
 void fft_init();
 void timer_for_triggering_adc_init();
