@@ -70,6 +70,12 @@ void Error_Handler(void);
 #define LCD_DC_GPIO_Port GPIOB
 #define LCD_RES_Pin GPIO_PIN_2
 #define LCD_RES_GPIO_Port GPIOB
+#define SCK_ADC_Pin GPIO_PIN_10
+#define SCK_ADC_GPIO_Port GPIOB
+#define ADC_CS_Pin GPIO_PIN_13
+#define ADC_CS_GPIO_Port GPIOB
+#define MISO_ADC_Pin GPIO_PIN_14
+#define MISO_ADC_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
