@@ -22,8 +22,10 @@ extern UART_HandleTypeDef huart1;
 arm_rfft_fast_instance_f32 fft_struct;
 
 uint8_t flag_adc_buf = 1;
-int16_t adc_in_buf_1[FHT_LEN], adc_in_buf_2[FHT_LEN];
-float32_t fft_in_buf[FHT_LEN];
+//int16_t adc_in_buf_1[FHT_LEN], adc_in_buf_2[FHT_LEN];
+
+float32_t adc_buf[FHT_LEN / 2];
+float32_t fft_in_buf_1[FHT_LEN], fft_in_buf_2[FHT_LEN], fft_in_buf[FHT_LEN];
 float32_t fft_out_buf[FHT_LEN];
 
 int16_t fx[FHT_LEN];
@@ -70,22 +72,59 @@ void timer_for_triggering_adc_init()
  **********************************************************/
 void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
 {
-	if(hdma->Instance == DMA1_Stream3)
+	if (hdma->Instance == DMA1_Stream3)
 	{
 		static uint16_t i;
+		static uint8_t State = 0;
 
-		if (flag_adc_buf == 1)
+		adc_buf[i] = (float) (((rx_buff & 0x1FFE) >> 1) - 2047);
+
+		i++;
+		if (i == FHT_LEN / 2)
 		{
-//			HAL_SPI_Receive(&hspi2, (uint8_t*) &buf, 1, 5000);
-			fft_in_buf[i] = (float) (((rx_buff >> 1) & 0x1FFE) - 2047);
-			i++;
-			if (i == FHT_LEN)
+			i = 0;
+
+			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, SET);
+
+			switch (State) {
+			case 0:
 			{
-				HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
-				i = 0;
-				flag_adc_buf = 0;
-				flag_data_processing = 1;
+				State = 1;
+				arm_copy_f32(adc_buf, &fft_in_buf_1[FHT_LEN / 2], FHT_LEN / 2);
+				arm_copy_f32(adc_buf, fft_in_buf_2, FHT_LEN / 2);
+				arm_copy_f32(fft_in_buf_1, fft_in_buf, FHT_LEN);
+				break;
 			}
+			case 1:
+			{
+				State = 2;
+				arm_copy_f32(adc_buf, fft_in_buf_1, FHT_LEN / 2);
+				arm_copy_f32(adc_buf, &fft_in_buf_2[FHT_LEN / 2], FHT_LEN / 2);
+				arm_copy_f32(fft_in_buf_2, fft_in_buf, FHT_LEN);
+				break;
+			}
+			case 2:
+			{
+				State = 3;
+				arm_copy_f32(adc_buf, &fft_in_buf_1[FHT_LEN / 2], FHT_LEN / 2);
+				arm_copy_f32(adc_buf, fft_in_buf_2, FHT_LEN / 2);
+				arm_copy_f32(fft_in_buf_1, fft_in_buf, FHT_LEN);
+				break;
+			}
+			case 3:
+			{
+				State = 0;
+				arm_copy_f32(adc_buf, fft_in_buf_1, FHT_LEN / 2);
+				arm_copy_f32(adc_buf, &fft_in_buf_2[FHT_LEN / 2], FHT_LEN / 2);
+				arm_copy_f32(fft_in_buf_2, fft_in_buf, FHT_LEN);
+				break;
+			}
+			default:
+				break;
+			}
+
+			flag_data_processing = 1;
+			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, RESET);
 		}
 	}
 }
@@ -93,8 +132,8 @@ void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
 /************************************************************
  *		Колбэк таймера с частотой дискретизации
  ***********************************************************/
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
+//void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+//{
 //	if (htim->Instance == TIM2)
 //	{
 //		HAL_GPIO_WritePin(ADC_NSS_GPIO_Port, ADC_NSS_Pin, RESET);
@@ -114,14 +153,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 ////			}
 ////		}
 //	}
-}
-
-/************************************************************
- *
- ***********************************************************/
-//float complexABS(float real, float compl)
-//{
-//	return sqrtf(real * real + compl * compl);
 //}
 /**************************************************************
  *			Семпл сохранен - колбек по завершению
@@ -180,8 +211,6 @@ void data_processing()
 		for (int i = 0; i < FHT_LEN / 2; ++i)
 		{
 			freqs[i] = (int) (20 * (log10f(fft_out_buf[i]))) - offset;
-//			freqs[i] = (int) (fft_out_buf[i]) >> 12;
-//			freqs[freqpoint] = (int) (20*log10f(complexABS(fft_out_buf[i], fft_out_buf[i + 1]))) - offset;
 			if (freqs[i] < 0) freqs[i] = 0;
 		}
 		for (uint16_t i = 0; i < 160; ++i)
@@ -189,11 +218,12 @@ void data_processing()
 			ST7789_DrawLine_for_Analyzer(i, freqs[i]);
 		}
 	}
+
 	ST7789_SendFrame();
 
-	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, SET);
+//	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, SET);
 
 	flag_data_processing = 0;
-	flag_adc_buf = 1;
-	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+
+//	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 }
