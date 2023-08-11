@@ -61,7 +61,7 @@
 #define ST7789_X_Start          0
 #define ST7789_Y_Start          0
 
-void ST7789_Init();
+void ST7789_Init(SPI_HandleTypeDef* hspi);
 void ST7789_HardReset(void);
 void ST7789_SoftReset(void);
 void ST7789_SleepModeEnter(void);

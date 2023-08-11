@@ -2,12 +2,14 @@
 /*
  * Анализатор может работать как с дисплеем, так и с адресными
  * светодиодами. Перед компиляцией необходимо определить дефайн
- *  tim2 - trigger_timer_for ADC 32кГц
- *  tim3 - PWM DMA WS2812
- *	SPI1 - DMA display ST7789
- *	DMA2 2ch - SPI1: memory - display
- *	DMA2 4ch - ADC: ADC - memory
- *	DMA2 7ch - UART
+ *
+ *  tim2 - trigger timer for ADC
+ *	SPI1 - for display ST7789
+ *	SPI2 - for external ADC
+ *	DMA2_Stream2 - SPI1_TX: memory - display
+ *	DMA1_Stream1 - TIM2_Update: memory - SPI2_TX external ADC
+ *	DMA1_Stream3 - SPI2_RX: external ADC - memory
+ *	DMA2_Stream7 - UART1_TX: memory - UART
  *
  *
  *
@@ -48,6 +50,7 @@ DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi2_rx;
 
 TIM_HandleTypeDef htim2;
+DMA_HandleTypeDef hdma_tim2_ch3_up;
 
 UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_tx;
@@ -96,14 +99,18 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-	MX_GPIO_Init();
-	MX_DMA_Init();
-	MX_TIM2_Init();
-	MX_SPI1_Init();
-	MX_USART1_UART_Init();
-	MX_SPI2_Init();
-	ST7789_Init();
 
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_TIM2_Init();
+  MX_SPI1_Init();
+  MX_USART1_UART_Init();
+  MX_SPI2_Init();
+  /* USER CODE BEGIN 2 */
+	ST7789_Init(&hspi1);
 	fft_init();
 	timer_for_triggering_adc_init();
   /* USER CODE END 2 */
@@ -220,11 +227,11 @@ static void MX_SPI2_Init(void)
   /* SPI2 parameter configuration*/
   hspi2.Instance = SPI2;
   hspi2.Init.Mode = SPI_MODE_MASTER;
-  hspi2.Init.Direction = SPI_DIRECTION_2LINES_RXONLY;
+  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
   hspi2.Init.DataSize = SPI_DATASIZE_16BIT;
   hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi2.Init.NSS = SPI_NSS_HARD_OUTPUT;
+  hspi2.Init.NSS = SPI_NSS_SOFT;
   hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
@@ -254,6 +261,7 @@ static void MX_TIM2_Init(void)
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
 
   /* USER CODE BEGIN TIM2_Init 1 */
 
@@ -273,15 +281,28 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 1100;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
+  HAL_TIM_MspPostInit(&htim2);
 
 }
 
@@ -329,6 +350,9 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
+  /* DMA1_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
   /* DMA1_Stream3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
@@ -366,7 +390,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOB, LCD_CS_Pin|LCD_DC_Pin|LCD_RES_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(ADC_CS_GPIO_Port, ADC_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(ADC_NSS_GPIO_Port, ADC_NSS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : LED_Pin */
   GPIO_InitStruct.Pin = LED_Pin;
@@ -388,19 +412,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(TEST_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LCD_CS_Pin LCD_DC_Pin LCD_RES_Pin */
-  GPIO_InitStruct.Pin = LCD_CS_Pin|LCD_DC_Pin|LCD_RES_Pin;
+  /*Configure GPIO pins : LCD_CS_Pin LCD_DC_Pin LCD_RES_Pin ADC_NSS_Pin */
+  GPIO_InitStruct.Pin = LCD_CS_Pin|LCD_DC_Pin|LCD_RES_Pin|ADC_NSS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : ADC_CS_Pin */
-  GPIO_InitStruct.Pin = ADC_CS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(ADC_CS_GPIO_Port, &GPIO_InitStruct);
 
 }
 

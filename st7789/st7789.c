@@ -1,5 +1,5 @@
 #include "main.h"
-#include <st7789.h>
+#include "st7789.h"
 #include "font5x7.h"
 #include "font7x11.h"
 #include <stdlib.h>
@@ -12,7 +12,7 @@
 #define DC_HIGH		HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_SET)
 #define DC_LOW		HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_RESET)
 
-extern SPI_HandleTypeDef hspi1;
+SPI_HandleTypeDef *hspi_lcd;
 
 static void ST7789_SendCmd(uint8_t Cmd);
 static void ST7789_SendData(uint8_t Data);
@@ -27,8 +27,9 @@ uint8_t flag_end_tx = 0;
 uint8_t VRAM[ST7789_WIDTH * ST7789_HEIGHT * 2] = { 0 };
 
 /**********************************************************************/
-void ST7789_Init()
+void ST7789_Init(SPI_HandleTypeDef *hspi)
 {
+	hspi_lcd = hspi;
 	ST7789_HardReset();
 	ST7789_SoftReset();
 	ST7789_SleepModeExit();
@@ -173,7 +174,7 @@ static void ST7789_SendCmd(uint8_t Cmd)
 //	SPI1->DR = Cmd;
 //	while (!(SPI1->SR & SPI_SR_TXE));
 	flag_end_tx = 1;
-	HAL_SPI_Transmit_IT(&hspi1, &Cmd, 1);
+	HAL_SPI_Transmit_IT(hspi_lcd, &Cmd, 1);
 //	CS_HIGH;
 }
 
@@ -188,7 +189,7 @@ static void ST7789_SendData(uint8_t Data)
 //	SPI2->DR = Data;
 //	while (!(SPI2->SR & SPI_SR_TXE));
 	flag_end_tx = 1;
-	HAL_SPI_Transmit_IT(&hspi1, &Data, 1);
+	HAL_SPI_Transmit_IT(hspi_lcd, &Data, 1);
 //	CS_HIGH;
 }
 
@@ -200,7 +201,7 @@ void ST7789_SendFrame(void)
 	DC_HIGH;
 	CS_LOW;
 	flag_end_tx = 1;
-	HAL_SPI_Transmit_DMA(&hspi1, VRAM, ST7789_WIDTH * ST7789_HEIGHT * 2);
+	HAL_SPI_Transmit_DMA(hspi_lcd, VRAM, ST7789_WIDTH * ST7789_HEIGHT * 2);
 }
 
 /**********************************************************************/

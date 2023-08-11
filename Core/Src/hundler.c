@@ -13,11 +13,9 @@
 #include "st7789.h"
 #include "arm_math.h"
 
-
 extern SPI_HandleTypeDef hspi2;
 
 extern TIM_HandleTypeDef htim2;	//триггер ацп
-extern TIM_HandleTypeDef htim3;	//ШИМ светодиоды
 
 extern UART_HandleTypeDef huart1;
 
@@ -29,6 +27,7 @@ float32_t fft_in_buf[FHT_LEN];
 float32_t fft_out_buf[FHT_LEN];
 
 int16_t fx[FHT_LEN];
+int16_t rx_buff, tx_buff = 0xAA01;
 
 /************************************************************
  *				Инит функции ARM DSP FFT
@@ -38,15 +37,57 @@ void fft_init()
 	arm_rfft_fast_init_f32(&fft_struct, FHT_LEN);
 }
 
+void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma);
 
 /************************************************************
  *		Запуск таймера, дергающий АЦП с нужным периодом
  ***********************************************************/
 void timer_for_triggering_adc_init()
 {
-	if (HAL_TIM_Base_Start_IT(&htim2) == HAL_OK)	//Запуск таймера для дискретизации
-	printf("TIM3_start Ok \r\n");
-	else printf("TIM3_start don't Ok \r\n");
+//	if (HAL_TIM_Base_Start_IT(&htim2) == HAL_OK)	//Запуск таймера для дискретизации
+//		printf("TIM3_start Ok \r\n");
+//	else printf("TIM3_start don't Ok \r\n");
+
+	hspi2.hdmarx->XferCpltCallback = SPI_DMAReceiveCplt;
+
+	HAL_DMA_Start_IT(hspi2.hdmarx, (uint32_t) &hspi2.Instance->DR, (uint32_t) &rx_buff, 1);
+	SET_BIT(hspi2.Instance->CR2, SPI_CR2_RXDMAEN);
+	__HAL_SPI_ENABLE(&hspi2);
+
+	HAL_DMA_Start(htim2.hdma[TIM_DMA_ID_UPDATE], (uint32_t) &tx_buff, (uint32_t) &hspi2.Instance->DR, 1);
+//	HAL_TIM_Base_Start_IT(&htim2);
+
+	__HAL_TIM_ENABLE_DMA(&htim2, TIM_DMA_UPDATE);
+
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+//	__HAL_TIM_MOE_ENABLE(&htim2);
+//	__HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
+//	__HAL_TIM_ENABLE(&htim2);
+}
+
+/***********************************************************
+ *
+ **********************************************************/
+void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
+{
+	if(hdma->Instance == DMA1_Stream3)
+	{
+		static uint16_t i;
+
+		if (flag_adc_buf == 1)
+		{
+//			HAL_SPI_Receive(&hspi2, (uint8_t*) &buf, 1, 5000);
+			fft_in_buf[i] = (float) (((rx_buff >> 1) & 0x1FFE) - 2047);
+			i++;
+			if (i == FHT_LEN)
+			{
+				HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+				i = 0;
+				flag_adc_buf = 0;
+				flag_data_processing = 1;
+			}
+		}
+	}
 }
 
 /************************************************************
@@ -54,24 +95,25 @@ void timer_for_triggering_adc_init()
  ***********************************************************/
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-	if (htim->Instance == TIM2)
-	{
-		static uint16_t i;
-		int16_t buf;
-
-		if (flag_adc_buf == 1)
-		{
-			HAL_SPI_Receive(&hspi2, (uint8_t*) &buf, 1, 5000);
-			fft_in_buf[i] = (float)(((buf >> 1) & 0x1FFE) - 2047);
-			i++;
-			if (i == FHT_LEN)
-			{
-				i = 0;
-				flag_adc_buf = 0;
-				flag_data_processing = 1;
-			}
-		}
-	}
+//	if (htim->Instance == TIM2)
+//	{
+//		HAL_GPIO_WritePin(ADC_NSS_GPIO_Port, ADC_NSS_Pin, RESET);
+////		static uint16_t i;
+////		int16_t buf;
+////
+////		if (flag_adc_buf == 1)
+////		{
+////			HAL_SPI_Receive(&hspi2, (uint8_t*) &buf, 1, 5000);
+////			fft_in_buf[i] = (float) (((buf >> 1) & 0x1FFE) - 2047);
+////			i++;
+////			if (i == FHT_LEN)
+////			{
+////				i = 0;
+////				flag_adc_buf = 0;
+////				flag_data_processing = 1;
+////			}
+////		}
+//	}
 }
 
 /************************************************************
@@ -113,7 +155,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 //	}
 //	flag_data_processing = 1;
 //}
-
 /************************************************************
  *
  ***********************************************************/
@@ -154,5 +195,5 @@ void data_processing()
 
 	flag_data_processing = 0;
 	flag_adc_buf = 1;
-
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 }
