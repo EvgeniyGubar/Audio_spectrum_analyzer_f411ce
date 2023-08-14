@@ -1,16 +1,10 @@
-#include "main.h"
+
 #include "st7789.h"
+#include "main.h"
 #include "font5x7.h"
 #include "font7x11.h"
 #include <stdlib.h>
 #include <string.h>
-
-#define RES_HIGH	HAL_GPIO_WritePin(LCD_RES_GPIO_Port, LCD_RES_Pin, GPIO_PIN_SET)
-#define RES_LOW		HAL_GPIO_WritePin(LCD_RES_GPIO_Port, LCD_RES_Pin, GPIO_PIN_RESET)
-#define CS_HIGH		HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET)
-#define CS_LOW		HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET)
-#define DC_HIGH		HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_SET)
-#define DC_LOW		HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_RESET)
 
 SPI_HandleTypeDef *hspi_lcd;
 
