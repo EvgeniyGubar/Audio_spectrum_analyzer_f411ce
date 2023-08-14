@@ -21,10 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "analyzer.h"
 #include "st7789.h"
 #include "stdio.h"
-#include "hundler.h"
-#include "myTasks.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -95,7 +94,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	ST7789_Init(&hspi1);
 	fft_init();
-	fft_hardware_init();
+	hardware_init();
 	createRTOS();
 
   /* USER CODE END 2 */
@@ -104,7 +103,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	while (1)
 	{
-//		if (fft_data_ready) task_data_processing();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

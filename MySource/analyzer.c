@@ -4,7 +4,7 @@
  *  Created on: Oct 23, 2022
  *      Author: Evgeniy
  */
-#include "hundler.h"
+#include "analyzer.h"
 #include "main.h"
 #include "windows.h"
 #include "st7789.h"
@@ -18,36 +18,28 @@
 extern SPI_HandleTypeDef hspi2;
 extern TIM_HandleTypeDef htim2;
 extern UART_HandleTypeDef huart1;
-extern xSemaphoreHandle Semaph_data_ready;
 
 arm_rfft_fast_instance_f32 fft_struct;
+int16_t rx_buff, tx_buff; //tx_buff фиктивная переменная для запуска работы SPI на прием
+float32_t adc_buf[FHT_LEN / 2];
+float32_t fft_in_buf_1[FHT_LEN], fft_in_buf_2[FHT_LEN];
 float32_t fft_in_buf[FHT_LEN];
 float32_t fft_out_buf[FHT_LEN];
 
-float32_t adc_buf[FHT_LEN / 2];
-float32_t fft_in_buf_1[FHT_LEN], fft_in_buf_2[FHT_LEN];
-
-int16_t rx_buff, tx_buff; //tx_buff фиктивная переменная для запуска работы SPI на прием
-
-xQueueHandle MyQueue;
 xSemaphoreHandle Semaph_data_ready;
-xSemaphoreHandle MySemaphoreCounting;
 
 void SPI_DMAReceiveCplt_from_ADC(DMA_HandleTypeDef *hdma);
 void led1Task(void const *argument);
 void debugTask(void const *argument);
-void BUTTON_Task(void const *argument);
-void Task_New(void const *argument);
 void processingTask(void const *argument);
 
+/***********************************************************/
 void createRTOS()
 {
 	BaseType_t xReturned;
 	TaskHandle_t xHandle = NULL;
 
-//	MyQueue = xQueueCreate(3, sizeof(uint8_t));
 	vSemaphoreCreateBinary(Semaph_data_ready);
-//	MySemaphoreCounting = xSemaphoreCreateCounting(5, 0);
 
 	if (Semaph_data_ready != NULL)
 	{
@@ -62,7 +54,8 @@ void createRTOS()
 		vTaskStartScheduler();
 	}
 }
-/******************************************************************************/
+
+/***********************************************************/
 void led1Task(void const *argument)
 {
 	for (;;)
@@ -73,6 +66,7 @@ void led1Task(void const *argument)
 	vTaskDelete(NULL);
 }
 
+/***********************************************************/
 void debugTask(void const *argument)
 {
 	for (;;)
@@ -83,7 +77,7 @@ void debugTask(void const *argument)
 }
 
 /************************************************************
- *
+ *		FFT преобразование и вывод на дисплей
  ***********************************************************/
 void processingTask(void const *argument)
 {
@@ -101,21 +95,30 @@ void processingTask(void const *argument)
 		}
 		else
 		{
-			int freqs[FHT_LEN / 2];
+			static int freqs[FHT_LEN / 2];
 			int offset = 33;	//variable noisefloor offset
 
 			applyHammingWindowFloat(fft_in_buf);
 			arm_rfft_fast_f32(&fft_struct, (float32_t*) &fft_in_buf, (float32_t*) &fft_out_buf, 0);
 			arm_cmplx_mag_f32(fft_out_buf, fft_out_buf, FHT_LEN);
 
+			int temp;
+
 			for (int i = 0; i < FHT_LEN / 2; ++i)
 			{
-				freqs[i] = (int) (20 * (log10f(fft_out_buf[i]))) - offset;
+				temp = (int)((20 * (log10f(fft_out_buf[i]))) - offset);
+				if (temp > freqs[i]) freqs[i] = temp;
+				else freqs[i]--;
+
 				if (freqs[i] < 0) freqs[i] = 0;
 			}
-			for (uint16_t i = 0; i < 160; ++i)
+
+			static uint16_t numBin[25] = { 1, 2, 3, 4, 5, 6, 7, 9, 12, 15, 19, 24, 31, 39, 50, 63, 80, 101, 127, 160,
+					202, 255, 322, 406, 510 };
+
+			for (uint16_t i = 0; i < 25; ++i)
 			{
-				ST7789_DrawLine_for_Analyzer(i, freqs[i]);
+				ST7789_DrawLine_for_Analyzer(4 + i * 6, (int16_t) (freqs[numBin[i]] * 1.5));
 			}
 		}
 		ST7789_SendFrame();
@@ -123,9 +126,7 @@ void processingTask(void const *argument)
 	vTaskDelete(NULL);
 }
 
-/************************************************************
- *				Инит функции ARM DSP FFT
- ***********************************************************/
+/***********************************************************/
 void fft_init()
 {
 	arm_rfft_fast_init_f32(&fft_struct, FHT_LEN);
@@ -134,7 +135,7 @@ void fft_init()
 /************************************************************
  *    Конфигурирование каналов DMA, запуск SPI и TIM
  ***********************************************************/
-void fft_hardware_init()
+void hardware_init()
 {
 	/* Указатель на функцию обратного вызова по окончанию работы DMA */
 	hspi2.hdmarx->XferCpltCallback = SPI_DMAReceiveCplt_from_ADC;
@@ -204,7 +205,6 @@ void SPI_DMAReceiveCplt_from_ADC(DMA_HandleTypeDef *hdma)
 			default:
 				break;
 			}
-
 
 			static portBASE_TYPE xHigherPriorityTaskWoken;
 			xHigherPriorityTaskWoken = pdFALSE;

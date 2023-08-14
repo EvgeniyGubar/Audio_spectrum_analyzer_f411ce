@@ -1,4 +1,3 @@
-
 #include "st7789.h"
 #include "main.h"
 #include "font5x7.h"
@@ -13,7 +12,6 @@ static void ST7789_SendData(uint8_t Data);
 //static void ST7789_ColumnSet(uint16_t ColumnStart, uint16_t ColumnEnd);
 //static void ST7789_RowSet(uint16_t RowStart, uint16_t RowEnd);
 static void ST7789_DrawLine_Slow(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color);
-
 
 static void SwapInt16Values(int16_t *pValue1, int16_t *pValue2);
 uint8_t flag_end_tx = 0;
@@ -261,18 +259,42 @@ void ST7789_DrawLine_for_Analyzer(int16_t y, int16_t x_max)
 	}
 
 	uint16_t offset = y * ST7789_WIDTH * 2;
+	uint16_t offset1 = (y + 1) * ST7789_WIDTH * 2;
+	uint16_t offset2 = (y + 2) * ST7789_WIDTH * 2;
+	uint16_t offset3 = (y + 3) * ST7789_WIDTH * 2;
 
 	for (uint16_t i = 0; i < x_max * 2; i += 2)
 	{
 		VRAM[i + offset] = BLUE >> 8;
 		VRAM[i + 1 + offset] = BLUE & 0xFF;
+		VRAM[i + offset1] = BLUE >> 8;
+		VRAM[i + 1 + offset1] = BLUE & 0xFF;
+		VRAM[i + offset2] = BLUE >> 8;
+		VRAM[i + 1 + offset2] = BLUE & 0xFF;
+		VRAM[i + offset3] = BLUE >> 8;
+		VRAM[i + 1 + offset3] = BLUE & 0xFF;
 	}
 	for (uint16_t i = x_max * 2; i < ST7789_WIDTH * 2; i += 2)
 	{
 		VRAM[i + offset] = BLACK >> 8;
 		VRAM[i + 1 + offset] = BLACK & 0xFF;
+		VRAM[i + offset1] = BLACK >> 8;
+		VRAM[i + 1 + offset1] = BLACK & 0xFF;
+		VRAM[i + offset2] = BLACK >> 8;
+		VRAM[i + 1 + offset2] = BLACK & 0xFF;
+		VRAM[i + offset3] = BLACK >> 8;
+		VRAM[i + 1 + offset3] = BLACK & 0xFF;
 	}
+}
 
+/**********************************************************************/
+void ST7789_DrawColumn_for_Analyzer(int16_t y, int16_t x_max)
+{
+	if (x_max > 128)
+	{
+		x_max = 128;
+	}
+	//in develop
 }
 
 /**********************************************************************/

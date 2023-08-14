@@ -82,6 +82,8 @@ void ST7789_SetWindow(int16_t x0, int16_t y0, int16_t x1, int16_t y1);
 void ST7789_RamWrite(uint16_t *pBuff, uint16_t Len);
 
 void ST7789_DrawLine_for_Analyzer(int16_t y, int16_t x_max);
+void ST7789_DrawColumn_for_Analyzer(int16_t y, int16_t x_max);
+
 void ST7789_SendFrame();
 void ST7789_SetBL(uint8_t Value);
 void ST7789_DisplayPower(uint8_t On);

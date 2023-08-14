@@ -5,13 +5,10 @@
  *      Author: Evgeniy
  */
 
-#include "../MySource/Inc/windows.h"
-
+#include "analyzer.h"
+#include "windows.h"
 #include <stdio.h>
 #include <math.h>
-
-#include "../MySource/Inc/hundler.h"
-
 
 //const float hammingTableFloat[512] = {//blackman-hurris
 //	6e-05,
@@ -68,7 +65,7 @@
 //0.997594, 0.99803, 0.998422, 0.998772, 0.999077, 0.999339, 0.999558, 0.999732, 0.999863, 0.999951,
 //0.999995};
 
-//const float hammingTable[512] = { // nuttal
+//const float hammingTableFloat[512] = { // nuttal
 //-2.42861e-17,
 //4.50915e-07, 1.80423e-06, 4.06165e-06, 7.22602e-06, 1.13013e-05, 1.62927e-05, 2.22063e-05, 2.90497e-05, 3.68313e-05, 4.55608e-05,
 //5.5249e-05, 6.59079e-05, 7.75505e-05, 9.01912e-05, 0.000103845, 0.000118529, 0.00013426, 0.000151058, 0.000168942, 0.000187933,
@@ -197,103 +194,3 @@ void applyHammingWindowFloat(float *fx)
 	}
 
 }
-
-// Generate a test sample
-void generateSampleFloat(float *fx, int16_t ifreq, int16_t iamplitude)
-{
-	// Generate input sine-wave:
-	double amplitude = (double) iamplitude; // Maximum = 16383
-	double samplesPerSecond = 32000;
-	double frequency = (double) ifreq;
-	double radiansPerSecond = (2 * M_PI) * frequency;
-	double time = 0;
-
-	int16_t i;
-	int16_t pointer = 0;
-
-	// Generate the required number of samples
-	for (i = 0; i < FHT_LEN; i++)
-	{
-		fx[i] = (amplitude * sin(radiansPerSecond * time));
-		time += 1 / samplesPerSecond;
-		pointer++;
-	}
-}
-
-//Код программы  на С++ для расчета коэф. оконных функций
-//// Online C++ compiler to run C++ program online
-//#include <iostream>
-//#include <cmath>
-//
-//static int RECTANGULAR = 0; // Rectangular window function
-//static int BARTLETT = 1; // Bartlett (triangular) window
-//static int HANNING = 2; // Hanning window
-//static int HAMMING = 3; // Hamming window
-//static int BLACKMAN = 4; // Blackman window
-//static int BLACKMAN_HARRIS = 5; // Blackman-Harris window, боковые лепестки на уровне -92дБ
-//
-//static int BLACKMAN_NUTTAL = 6; // Blackman-Nuttal window
-//static int NUTTAL = 7; // Nuttal window
-//
-////
-//
-//const double PI = 3.141592653589793;
-//
-///**
-//
-// * получить коэффициент заданного типа окна
-// * @param i - индекс
-// * @param n - размер окна
-// * @param type - тип окна
-// * @return коэффициент
-// */
-//
-//static double getWindow(int i, int n, int window)
-//{
-//	if (window == BARTLETT)
-//	{ // устраняем нулевые значения
-//		double a = i - (n - 1) / 2.0;
-//		if (a < 0) a = -a;
-//		return 2.0 / n * (n / 2.0 - a);
-//	}
-//
-//	else if (window == HANNING) // устраняем нулевые значения
-//		return 0.5 - 0.5 * cos(PI / n * (1.0 + 2.0 * i));
-//	if (window == BLACKMAN)
-//	{ // устраняем нулевые значения
-//		double a = PI / n * (1.0 + 2.0 * i);
-//		return 0.5 * (1.0 - 0.16 - cos(a) + 0.16 * cos(2.0 * a));
-//	}
-//
-//	else
-//	{
-//		double a = 2.0 * PI * i / (n - 1);
-//		if (window == HAMMING) return 0.54 - 0.46 * cos(a);
-//		else if (window == BLACKMAN_HARRIS) return 0.35875 - 0.48829 * cos(a) + 0.14128 * cos(2.0 * a)
-//				- 0.01168 * cos(3.0 * a);
-//		else if (window == BLACKMAN_NUTTAL) return 0.35819 - 0.4891775 * cos(a) + 0.1365995 * cos(2.0 * a)
-//				- 0.0106411 * cos(3.0 * a);
-//		else if (window == NUTTAL)
-//			return 0.355768 - 0.487396 * cos(a) + 0.144232 * cos(2.0 * a) - 0.012604 * cos(3.0 * a);
-//	}
-//
-//	//if( type == RECTANGULAR )
-//	return 1.0;
-//
-//}
-//
-//int main()
-//{
-//	// Write C++ code here
-//	std
-//	::cout << "Hello world!";
-//	for (int i = 0; i < 512; ++i)
-//	{
-//		std
-//		::cout << getWindow(i, 1024, BLACKMAN_HARRIS) << ", ";
-//		if(i%10 == 0)
-//		std
-//	::cout << "\r\n";
-//}
-//return 0;
-//}
