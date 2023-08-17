@@ -17,9 +17,11 @@
 
 extern SPI_HandleTypeDef hspi2;
 extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart1;
 
 arm_rfft_fast_instance_f32 fft_struct;
+
 int16_t rx_buff, tx_buff; //tx_buff фиктивная переменная для запуска работы SPI на прием
 float32_t adc_buf[FHT_LEN / 2];
 float32_t fft_in_buf_1[FHT_LEN], fft_in_buf_2[FHT_LEN];
@@ -27,9 +29,11 @@ float32_t fft_in_buf[FHT_LEN];
 float32_t fft_out_buf[FHT_LEN];
 
 xSemaphoreHandle Semaph_data_ready;
+xQueueHandle Queue_encoder;
 
 void SPI_DMAReceiveCplt_from_ADC(DMA_HandleTypeDef *hdma);
 void led1Task(void const *argument);
+void encoderTask(void const *argument);
 void debugTask(void const *argument);
 void processingTask(void const *argument);
 
@@ -40,11 +44,13 @@ void createRTOS()
 	TaskHandle_t xHandle = NULL;
 
 	vSemaphoreCreateBinary(Semaph_data_ready);
+	Queue_encoder = xQueueCreate(1, sizeof(int8_t));
 
-	if (Semaph_data_ready != NULL)
+	if ((Queue_encoder != NULL) && (Semaph_data_ready != NULL))
 	{
-		xTaskCreate((void*) led1Task, "Led 1", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-		xTaskCreate((void*) debugTask, "debugTask", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+		xTaskCreate((void*) led1Task, "Led 1 Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+		xTaskCreate((void*) encoderTask, "encoder Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+		xTaskCreate((void*) debugTask, "debug Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 		xReturned = xTaskCreate((void*) processingTask, "Led 2", configMINIMAL_STACK_SIZE * 10, NULL, 1, &xHandle);
 		if (xReturned != pdPASS)
 		{
@@ -53,6 +59,45 @@ void createRTOS()
 
 		vTaskStartScheduler();
 	}
+}
+
+/***********************************************************/
+void encoderTask(void const *argument)
+{
+	static uint8_t prevCounter = 0;
+	int8_t encoder;
+
+	for (;;)
+	{
+		uint8_t currCounter = __HAL_TIM_GET_COUNTER(&htim4);
+
+		if (currCounter != prevCounter)
+		{
+			if ((currCounter < 50) && (prevCounter - currCounter) > 50)
+			{
+				encoder = 1;
+			}
+			else if ((prevCounter < 50) && (currCounter - prevCounter) > 50)
+			{
+				encoder = -1;
+			}
+			else
+			{
+				encoder = (currCounter > prevCounter) ? 1 : -1;
+			}
+//			char buff[16];
+//			snprintf(buff, sizeof(buff), "curr %3d", currCounter);
+//			ST7789_print_7x11(10, 10, WHITE, BLACK, 0, buff);
+//			snprintf(buff, sizeof(buff), "prev %3d", prevCounter);
+//			ST7789_print_7x11(10, 25, WHITE, BLACK, 0, buff);
+//			snprintf(buff, sizeof(buff), "enc %3d", encoder);
+//			ST7789_print_7x11(10, 40, WHITE, BLACK, 0, buff);
+			prevCounter = currCounter;
+			xQueueSendToBack(Queue_encoder, &encoder, 0);
+			vTaskDelay(50);
+		}
+	}
+	vTaskDelete(NULL);
 }
 
 /***********************************************************/
@@ -81,6 +126,7 @@ void debugTask(void const *argument)
  ***********************************************************/
 void processingTask(void const *argument)
 {
+	portBASE_TYPE xStatus;
 	for (;;)
 	{
 		/* Блокирующий семафор, ожидает готового семпла*/
@@ -96,22 +142,34 @@ void processingTask(void const *argument)
 		else
 		{
 			static int freqs[FHT_LEN / 2];
-			int offset = 33;	//variable noisefloor offset
+			int8_t offset, encoder;	//variable noisefloor offset
 
 			applyHammingWindowFloat(fft_in_buf);
 			arm_rfft_fast_f32(&fft_struct, (float32_t*) &fft_in_buf, (float32_t*) &fft_out_buf, 0);
 			arm_cmplx_mag_f32(fft_out_buf, fft_out_buf, FHT_LEN);
 
 			int temp;
-
 			for (int i = 0; i < FHT_LEN / 2; ++i)
 			{
-				temp = (int)((20 * (log10f(fft_out_buf[i]))) - offset);
+				/* Берем информацию о состоянии энкодера из очереди */
+				xStatus = xQueueReceive(Queue_encoder, &encoder, 0);
+				if(xStatus == pdPASS)
+				{
+					offset += encoder;
+					if (offset < 0) offset = 0;
+				}
+
+				temp = (int) ((20 * (log10f(fft_out_buf[i]))) - offset);
+
 				if (temp > freqs[i]) freqs[i] = temp;
 				else freqs[i]--;
 
 				if (freqs[i] < 0) freqs[i] = 0;
 			}
+//			for (uint16_t i = 0; i < ST7789_HEIGHT; ++i)
+//			{
+//				ST7789_DrawLine_for_Analyzer(i, freqs[i]);
+//			}
 
 			static uint16_t numBin[25] = { 1, 2, 3, 4, 5, 6, 7, 9, 12, 15, 19, 24, 31, 39, 50, 63, 80, 101, 127, 160,
 					202, 255, 322, 406, 510 };

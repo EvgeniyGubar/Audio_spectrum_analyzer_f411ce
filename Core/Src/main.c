@@ -91,7 +91,10 @@ int main(void)
   MX_SPI1_Init();
   MX_USART1_UART_Init();
   MX_SPI2_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
+
+	HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
 	ST7789_Init(&hspi1);
 	fft_init();
 	hardware_init();
@@ -103,9 +106,11 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	while (1)
 	{
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
 	}
   /* USER CODE END 3 */
 }
