@@ -8,6 +8,7 @@
 #include "main.h"
 #include "windows.h"
 #include "st7789.h"
+#include "lcd_analyzer.h"
 #include "stdio.h"
 #include "arm_math.h"
 #include "FreeRTOS.h"
@@ -149,37 +150,40 @@ void processingTask(void const *argument)
 			arm_cmplx_mag_f32(fft_out_buf, fft_out_buf, FHT_LEN);
 
 			int temp;
-			for (int i = 0; i < FHT_LEN / 2; ++i)
+			/* Берем информацию о состоянии энкодера из очереди */
+			xStatus = xQueueReceive(Queue_encoder, &encoder, 0);
+
+			if(xStatus == pdPASS)
 			{
-				/* Берем информацию о состоянии энкодера из очереди */
-				xStatus = xQueueReceive(Queue_encoder, &encoder, 0);
-				if(xStatus == pdPASS)
-				{
-					offset += encoder;
-					if (offset < 0) offset = 0;
-				}
+				offset += encoder;
+				if (offset < 0) offset = 0;
+			}
 
-				temp = (int) ((20 * (log10f(fft_out_buf[i]))) - offset);
+			for (uint16_t i = 0; i < FHT_LEN / 2; ++i)
+			{
+//				temp = (int) ((20 * (log10f(fft_out_buf[i]))) - offset);
 
-				if (temp > freqs[i]) freqs[i] = temp;
-				else freqs[i]--;
+				freqs[i] = (int) (20 * (log10f(fft_out_buf[i])))- offset;
+//				if (temp > freqs[i]) freqs[i] = temp;
+//				else freqs[i]--;
 
 				if (freqs[i] < 0) freqs[i] = 0;
 			}
-//			for (uint16_t i = 0; i < ST7789_HEIGHT; ++i)
-//			{
-//				ST7789_DrawLine_for_Analyzer(i, freqs[i]);
-//			}
 
-			static uint16_t numBin[25] = { 1, 2, 3, 4, 5, 6, 7, 9, 12, 15, 19, 24, 31, 39, 50, 63, 80, 101, 127, 160,
-					202, 255, 322, 406, 510 };
-
-			for (uint16_t i = 0; i < 25; ++i)
+			for (uint16_t i = 0; i < ST7789_HEIGHT; ++i)
 			{
-				ST7789_DrawLine_for_Analyzer(4 + i * 6, (int16_t) (freqs[numBin[i]] * 1.5));
+				ST7789_DrawLine_for_Analyzer(i, freqs[i]);
 			}
+
+//			static uint16_t numBin[25] = { 1, 2, 3, 4, 5, 6, 7, 9, 12, 15, 19, 24, 31, 39, 50, 63, 80, 101, 127, 160,
+//					202, 255, 322, 406, 510 };
+//
+//			for (uint16_t i = 0; i < 25; ++i)
+//			{
+//				ST7789_DrawLine_for_Analyzer(4 + i * 6, (int16_t) (freqs[numBin[i]] * 1.5));
+//			}
 		}
-		ST7789_SendFrame();
+		ST7789_PrintScreen();
 	}
 	vTaskDelete(NULL);
 }

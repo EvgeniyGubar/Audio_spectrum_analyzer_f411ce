@@ -68,8 +68,6 @@ void Error_Handler(void);
 #define LCD_CS_GPIO_Port GPIOB
 #define LCD_DC_Pin GPIO_PIN_1
 #define LCD_DC_GPIO_Port GPIOB
-#define LCD_RES_Pin GPIO_PIN_2
-#define LCD_RES_GPIO_Port GPIOB
 #define ADC_SCK_Pin GPIO_PIN_10
 #define ADC_SCK_GPIO_Port GPIOB
 #define ADC_NSS_Pin GPIO_PIN_12
