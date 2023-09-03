@@ -74,6 +74,8 @@ void Error_Handler(void);
 #define ADC_NSS_GPIO_Port GPIOB
 #define ADC_MISO_Pin GPIO_PIN_14
 #define ADC_MISO_GPIO_Port GPIOB
+#define Butt_enc_Pin GPIO_PIN_8
+#define Butt_enc_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

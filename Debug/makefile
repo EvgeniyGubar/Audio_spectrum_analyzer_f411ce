@@ -11,6 +11,7 @@ RM := rm -rf
 -include sources.mk
 -include ST7789/subdir.mk
 -include MySource/subdir.mk
+-include Micromenu-v2/subdir.mk
 -include FreeRTOS/MemMang/subdir.mk
 -include FreeRTOS/ARM_CM4F/subdir.mk
 -include FreeRTOS/subdir.mk

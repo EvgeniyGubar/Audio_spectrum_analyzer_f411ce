@@ -96,9 +96,10 @@ int main(void)
 
 	HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
 	ST7789_Init(&hspi1);
-	fft_init();
-	hardware_init();
-	createRTOS();
+	fftInit();
+	hardwareInit();
+  	menuInit();
+	RTOScreate();
 
   /* USER CODE END 2 */
 

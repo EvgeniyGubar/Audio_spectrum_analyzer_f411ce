@@ -4,6 +4,7 @@
  *  Created on: Oct 23, 2022
  *      Author: Evgeniy
  */
+#include "MicroMenu.h"
 #include "analyzer.h"
 #include "main.h"
 #include "windows.h"
@@ -31,60 +32,193 @@ float32_t fft_out_buf[FHT_LEN];
 
 xSemaphoreHandle Semaph_data_ready;
 xQueueHandle Queue_encoder;
+xQueueHandle Queue_menu_navigate;
 
 void SPI_DMAReceiveCplt_from_ADC(DMA_HandleTypeDef *hdma);
 void led1Task(void const *argument);
 void encoderTask(void const *argument);
 void debugTask(void const *argument);
 void processingTask(void const *argument);
+void menuTask(void const *argument);
+void buttEncTask(void const *argument);
+
+/*** DUMMY CODE ***/
+typedef enum {
+	BUTTON_NONE, BUTTON_PREVIOUS, BUTTON_NEXT, BUTTON_PARENT, BUTTON_CHILD, BUTTON_ENTER,
+} ButtonValues;
+
+ButtonValues GetButtonPress(void)
+{
+	return BUTTON_NONE;
+}
+/*** END DUMMY CODE ***/
+
+/** Example menu item specific enter callback function, run when the associated menu item is entered. */
+static void Level1Item1_Enter(void)
+{
+	ST7789_DrawFillRect(10, 30, 128, 11, BLACK, updateVRAM);
+	ST7789_DrawText_7x11(10, 30, WHITE, "Enter", updateScreen);
+//	puts("ENTER");
+}
+
+/** Example menu item specific select callback function, run when the associated menu item is selected. */
+static void Level1Item1_Select(void)
+{
+	ST7789_DrawFillRect(10, 30, 128, 11, BLACK, updateVRAM);
+	ST7789_DrawText_7x11(10, 30, WHITE, "Select", updateScreen);
+//	puts("SELECT");
+}
+
+/** Generic function to write the text of a menu.
+ *
+ *  \param[in] Text   Text of the selected menu to write, in \ref MENU_ITEM_STORAGE memory space
+ */
+static void Generic_Write(const char *Text)
+{
+	if (Text)
+	{
+		ST7789_DrawFillRect(10, 10, 128, 11, BLACK, updateVRAM);
+		ST7789_DrawText_7x11(10, 10, WHITE, (char*)Text, updateScreen);
+	}
+//		puts(Text);
+}
+
+MENU_ITEM(Menu_1, Menu_2, Menu_3, NULL_MENU, Menu_1_1, Level1Item1_Select, Level1Item1_Enter, "Func 1");
+MENU_ITEM(Menu_2, Menu_3, Menu_1, NULL_MENU, NULL_MENU, NULL, NULL, "Func 2");
+MENU_ITEM(Menu_3, Menu_1, Menu_2, NULL_MENU, NULL_MENU, NULL, NULL, "Func 3");
+
+MENU_ITEM(Menu_1_1, Menu_1_2, Menu_1_2, Menu_1, NULL_MENU, NULL, NULL, "1.1");
+MENU_ITEM(Menu_1_2, Menu_1_1, Menu_1_1, Menu_1, NULL_MENU, NULL, NULL, "1.2");
 
 /***********************************************************/
-void createRTOS()
+void menuInit()
+{
+	Menu_SetGenericWriteCallback(Generic_Write);
+	Menu_Navigate(&Menu_1);
+}
+
+/***********************************************************/
+void RTOScreate()
 {
 	BaseType_t xReturned;
 	TaskHandle_t xHandle = NULL;
 
 	vSemaphoreCreateBinary(Semaph_data_ready);
 	Queue_encoder = xQueueCreate(1, sizeof(int8_t));
+	Queue_menu_navigate = xQueueCreate(5, sizeof(ButtonValues));
 
-	if ((Queue_encoder != NULL) && (Semaph_data_ready != NULL))
+	if ((Queue_encoder != NULL) && (Semaph_data_ready != NULL) && (Queue_menu_navigate != NULL))
 	{
-		xTaskCreate((void*) led1Task, "Led 1 Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-		xTaskCreate((void*) encoderTask, "encoder Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-		xTaskCreate((void*) debugTask, "debug Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-		xReturned = xTaskCreate((void*) processingTask, "Led 2", configMINIMAL_STACK_SIZE * 10, NULL, 1, &xHandle);
-		if (xReturned != pdPASS)
-		{
-			Error_Handler();
-		}
+		xReturned = xTaskCreate((void*) led1Task, "Led 1 Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+		if (xReturned != pdPASS) Error_Handler();
+		xReturned = xTaskCreate((void*) encoderTask, "Encoder Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+		if (xReturned != pdPASS) Error_Handler();
+		xReturned = xTaskCreate((void*) debugTask, "Debug Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+		if (xReturned != pdPASS) Error_Handler();
+		xReturned = xTaskCreate((void*) menuTask, "Menu Task", configMINIMAL_STACK_SIZE*10, NULL, 1, NULL);
+		if (xReturned != pdPASS) Error_Handler();
+		xReturned = xTaskCreate((void*) buttEncTask, "Button enc Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+		if (xReturned != pdPASS) Error_Handler();
+		xReturned = xTaskCreate((void*) processingTask, "Processing Task", configMINIMAL_STACK_SIZE * 10, NULL, 1, &xHandle);
+		if (xReturned != pdPASS) Error_Handler();
 
 		vTaskStartScheduler();
 	}
 }
 
 /***********************************************************/
+void menuTask(void const *argument)
+{
+	for (;;)
+	{
+		/* Example usage of MicroMenu - here you can create your custom menu navigation system; you may wish to perform
+		 * other tasks while detecting key presses, enter sleep mode while waiting for user input, etc.
+		 */
+		ButtonValues Value = BUTTON_NONE;
+		portBASE_TYPE xStatus;
+
+		xStatus = xQueueReceive(Queue_menu_navigate, &Value, 0);
+
+		if (xStatus == pdPASS)
+		{
+			switch (Value) {
+			case BUTTON_PREVIOUS:
+				Menu_Navigate(MENU_PREVIOUS);
+				break;
+			case BUTTON_NEXT:
+				Menu_Navigate(MENU_NEXT);
+				break;
+			case BUTTON_PARENT:
+				Menu_Navigate(MENU_PARENT);
+				break;
+			case BUTTON_CHILD:
+				Menu_Navigate(MENU_CHILD);
+				break;
+			case BUTTON_ENTER:
+				Menu_EnterCurrentItem();
+				break;
+			default:
+				break;
+			}
+		}
+	}
+	vTaskDelete(NULL);
+}
+
+/***********************************************************/
+void buttEncTask(void const *argument)
+{
+	for (;;)
+	{
+		ButtonValues Value = BUTTON_NONE;
+
+		if (HAL_GPIO_ReadPin(Butt_enc_GPIO_Port, Butt_enc_Pin) == 0)
+		{
+			vTaskDelay(20);
+			if (HAL_GPIO_ReadPin(Butt_enc_GPIO_Port, Butt_enc_Pin) == 0) Value = BUTTON_CHILD;
+			while (HAL_GPIO_ReadPin(Butt_enc_GPIO_Port, Butt_enc_Pin) == 0)
+			{
+				uint8_t count;
+				vTaskDelay(50);
+				++count;
+				if (count == 20)
+				{
+					count = 0;
+					Value = BUTTON_PARENT;
+					break;
+				}
+			}
+			xQueueSendToBack(Queue_menu_navigate, &Value, 10);
+			while (HAL_GPIO_ReadPin(Butt_enc_GPIO_Port, Butt_enc_Pin) == 0);
+		}
+		vTaskDelay(50);
+	}
+	vTaskDelete(NULL);
+}
+
+/***********************************************************/
 void encoderTask(void const *argument)
 {
 	static uint8_t prevCounter = 0;
-	int8_t encoder;
+	ButtonValues Value = BUTTON_NONE;
 
 	for (;;)
 	{
-		uint8_t currCounter = __HAL_TIM_GET_COUNTER(&htim4);
+		uint8_t currCounter = __HAL_TIM_GET_COUNTER(&htim4)/2;
 
 		if (currCounter != prevCounter)
 		{
 			if ((currCounter < 50) && (prevCounter - currCounter) > 50)
 			{
-				encoder = 1;
+				Value = BUTTON_NEXT; //1
 			}
 			else if ((prevCounter < 50) && (currCounter - prevCounter) > 50)
 			{
-				encoder = -1;
+				Value = BUTTON_PREVIOUS; //-1
 			}
 			else
 			{
-				encoder = (currCounter > prevCounter) ? 1 : -1;
+				Value = (currCounter > prevCounter) ? BUTTON_NEXT : BUTTON_PREVIOUS;
 			}
 //			char buff[16];
 //			snprintf(buff, sizeof(buff), "curr %3d", currCounter);
@@ -94,7 +228,7 @@ void encoderTask(void const *argument)
 //			snprintf(buff, sizeof(buff), "enc %3d", encoder);
 //			ST7789_print_7x11(10, 40, WHITE, BLACK, 0, buff);
 			prevCounter = currCounter;
-			xQueueSendToBack(Queue_encoder, &encoder, 0);
+			xQueueSendToBack(Queue_menu_navigate, &Value, 10);
 			vTaskDelay(50);
 		}
 	}
@@ -127,7 +261,7 @@ void debugTask(void const *argument)
  ***********************************************************/
 void processingTask(void const *argument)
 {
-	portBASE_TYPE xStatus;
+//	portBASE_TYPE xStatus;
 	for (;;)
 	{
 		/* Блокирующий семафор, ожидает готового семпла*/
@@ -142,28 +276,29 @@ void processingTask(void const *argument)
 		}
 		else
 		{
-			static int freqs[FHT_LEN / 2];
-			int8_t offset, encoder;	//variable noisefloor offset
 
 			applyHammingWindowFloat(fft_in_buf);
 			arm_rfft_fast_f32(&fft_struct, (float32_t*) &fft_in_buf, (float32_t*) &fft_out_buf, 0);
 			arm_cmplx_mag_f32(fft_out_buf, fft_out_buf, FHT_LEN);
 
-			int temp;
-			/* Берем информацию о состоянии энкодера из очереди */
-			xStatus = xQueueReceive(Queue_encoder, &encoder, 0);
 
-			if(xStatus == pdPASS)
-			{
-				offset += encoder;
-				if (offset < 0) offset = 0;
-			}
+//			int temp;
+			static int freqs[FHT_LEN / 2];
+//			int8_t offset, encoder;	//variable noisefloor offset
+//			/* Берем информацию о состоянии энкодера из очереди */
+//			xStatus = xQueueReceive(Queue_encoder, &encoder, 0);
+//
+//			if (xStatus == pdPASS)
+//			{
+//				offset += encoder;
+//				if (offset < 0) offset = 0;
+//			}
 
 			for (uint16_t i = 0; i < FHT_LEN / 2; ++i)
 			{
 //				temp = (int) ((20 * (log10f(fft_out_buf[i]))) - offset);
 
-				freqs[i] = (int) (20 * (log10f(fft_out_buf[i])))- offset;
+				freqs[i] = (int) (20 * (log10f(fft_out_buf[i]))); // - offset;
 //				if (temp > freqs[i]) freqs[i] = temp;
 //				else freqs[i]--;
 
@@ -189,7 +324,7 @@ void processingTask(void const *argument)
 }
 
 /***********************************************************/
-void fft_init()
+void fftInit()
 {
 	arm_rfft_fast_init_f32(&fft_struct, FHT_LEN);
 }
@@ -197,7 +332,7 @@ void fft_init()
 /************************************************************
  *    Конфигурирование каналов DMA, запуск SPI и TIM
  ***********************************************************/
-void hardware_init()
+void hardwareInit()
 {
 	/* Указатель на функцию обратного вызова по окончанию работы DMA */
 	hspi2.hdmarx->XferCpltCallback = SPI_DMAReceiveCplt_from_ADC;
