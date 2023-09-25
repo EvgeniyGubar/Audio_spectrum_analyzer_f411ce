@@ -64,11 +64,11 @@ typedef enum {
 	updateVRAM,		// write element to VRAM without screen update
 	updateElement,	// write element to VRAM and show this element only
 	updateScreen	// write element to VRAM and update screen according to VRAM
-} action;
+} st7789_Action;
 
 typedef enum {
 	OFF, ON
-} Mode;
+} st7789_Mode;
 
 typedef enum {
 	Portrait_0,
@@ -79,34 +79,40 @@ typedef enum {
 	Album_90_Mirror,
 	Portrait_180_Mirror,
 	Album_270_Mirror
-} Orientation;
+} st7789_Orientation;
+
+typedef enum {
+	Normal,
+	Left,
+	Right
+} st7789_Rotate;
 
 void ST7789_Init(SPI_HandleTypeDef *hspi);
 void ST7789_SoftReset(void);
-void ST7789_SleepMode(Mode State);
-void ST7789_Orientation(Orientation State);
+void ST7789_SleepMode(st7789_Mode State);
+void ST7789_Orientation(st7789_Orientation State);
 void ST7789_ColorModeSet(uint8_t ColorMode);
-void ST7789_InversionMode(Mode State);
+void ST7789_InversionMode(st7789_Mode State);
 void ST7789_SetBL(uint8_t Value);
-void ST7789_DisplayPower(Mode State);
+void ST7789_DisplayPower(st7789_Mode State);
 
 void ST7789_SetWindow(int16_t x0, int16_t y0, int16_t x1, int16_t y1);
 void ST7789_SavePixel(int16_t x, int16_t y, uint16_t color);
 void ST7789_PrintElement(int16_t x0, int16_t y0, int16_t x1, int16_t y1);
 void ST7789_PrintPixel(int16_t x, int16_t y);
 void ST7789_PrintScreen(void);
-void ST7789_DrawLine_Slow(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, action act);
+void ST7789_DrawLine_Slow(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, st7789_Action act);
 
 uint16_t ST7789_RGBToColor(uint8_t r, uint8_t g, uint8_t b);
-void ST7789_DrawFillScreen(uint16_t color, action act);
+void ST7789_DrawFillScreen(uint16_t color, st7789_Action act);
 void ST7789_DrawFillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, uint8_t draw);
-void ST7789_DrawRect(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, action act);
-void ST7789_DrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, action act);
-void ST7789_DrawCircleFilled(int16_t x0, int16_t y0, int16_t radius, uint16_t fillcolor, action act);
-void ST7789_DrawCircle(int16_t x0, int16_t y0, int16_t radius, uint16_t color, action act);
-void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, action act);
-void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, action act);
-void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, action act);
-void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, action act);
+void ST7789_DrawRect(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, st7789_Action act);
+void ST7789_DrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, st7789_Action act);
+void ST7789_DrawCircleFilled(int16_t x0, int16_t y0, int16_t radius, uint16_t fillcolor, st7789_Action act);
+void ST7789_DrawCircle(int16_t x0, int16_t y0, int16_t radius, uint16_t color, st7789_Action act);
+void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act);
+void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act);
+void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act);
+void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act);
 
 #endif

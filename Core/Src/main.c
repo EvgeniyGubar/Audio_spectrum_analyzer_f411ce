@@ -44,7 +44,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+extern volatile unsigned long ulHighFrequencyTimerTicks;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -55,7 +55,6 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /* USER CODE END 0 */
 
 /**
@@ -92,13 +91,15 @@ int main(void)
   MX_USART1_UART_Init();
   MX_SPI2_Init();
   MX_TIM4_Init();
+  MX_TIM11_Init();
   /* USER CODE BEGIN 2 */
 
 	HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
 	ST7789_Init(&hspi1);
+	HAL_TIM_Base_Start_IT(&htim11);
 	fftInit();
 	hardwareInit();
-  	menuInit();
+
 	RTOScreate();
 
   /* USER CODE END 2 */
@@ -186,7 +187,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-
+  if (htim->Instance == TIM11) {
+//     HAL_IncTick();
+	  ulHighFrequencyTimerTicks++;
+   }
   /* USER CODE END Callback 1 */
 }
 

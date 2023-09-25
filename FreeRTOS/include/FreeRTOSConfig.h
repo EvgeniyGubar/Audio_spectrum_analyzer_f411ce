@@ -41,7 +41,7 @@
 
 // 1 - вытесняющая, 0 - кооперативная
 #define configUSE_PREEMPTION		1
-#define configUSE_IDLE_HOOK			0
+#define configUSE_IDLE_HOOK			1
 #define configUSE_TICK_HOOK			0
 #define configCPU_CLOCK_HZ			( ( unsigned long ) 100000000 )
 #define configTICK_RATE_HZ			( ( TickType_t ) 1000 )
@@ -49,11 +49,16 @@
 #define configMINIMAL_STACK_SIZE	( ( unsigned short ) 128 )
 #define configTOTAL_HEAP_SIZE		( ( size_t ) ( 17 * 1024 ) )
 #define configMAX_TASK_NAME_LEN		( 16 )
-#define configUSE_TRACE_FACILITY	0
+
+/* Run time and task stats gathering related definitions. */
+#define configGENERATE_RUN_TIME_STATS            1
+#define configUSE_TRACE_FACILITY                 1
+#define configUSE_STATS_FORMATTING_FUNCTIONS     1
+
 #define configUSE_16_BIT_TICKS		0
 #define configIDLE_SHOULD_YIELD		1
 
-#define configUSE_COUNTING_SEMAPHORES			1	// сам добавил
+#define configUSE_COUNTING_SEMAPHORES			1
 
 
 /* Set the following definitions to 1 to include the API function, or zero
@@ -80,6 +85,11 @@ priority values, 0 to 15.  This must correspond to the
 configKERNEL_INTERRUPT_PRIORITY setting.  Here 15 corresponds to the lowest
 NVIC value of 255. */
 #define configLIBRARY_KERNEL_INTERRUPT_PRIORITY	15
+
+volatile unsigned long ulHighFrequencyTimerTicks;
+
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() ( ulHighFrequencyTimerTicks = 0UL )
+#define portGET_RUN_TIME_COUNTER_VALUE() ulHighFrequencyTimerTicks
 
 #define xPortSysTickHandler 		SysTick_Handler
 #define xPortPendSVHandler 			PendSV_Handler

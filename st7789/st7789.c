@@ -7,7 +7,7 @@
 
 extern SPI_HandleTypeDef *hspi_lcd;
 
-static uint16_t lcd_X_max, lcd_Y_max;
+uint16_t lcd_X_max, lcd_Y_max;
 
 uint16_t VRAM[ST7789_WIDTH * ST7789_HEIGHT] = { 0 };
 
@@ -32,13 +32,13 @@ void ST7789_SoftReset(void)
 	HAL_Delay(120);
 }
 /**********************************************************************/
-void ST7789_SleepMode(Mode State)
+void ST7789_SleepMode(st7789_Mode State)
 {
 	State == ON ? ST7789_SendCmd(ST7789_Cmd_SLPIN) : ST7789_SendCmd(ST7789_Cmd_SLPOUT);
 	HAL_Delay(120);
 }
 /**********************************************************************/
-void ST7789_DisplayPower(Mode State)
+void ST7789_DisplayPower(st7789_Mode State)
 {
 	State == ON ? ST7789_SendCmd(ST7789_Cmd_DISPON) : ST7789_SendCmd(ST7789_Cmd_DISPOFF);
 }
@@ -49,12 +49,12 @@ void ST7789_ColorModeSet(uint8_t ColorMode)
 	ST7789_SendData(ColorMode);
 }
 /**********************************************************************/
-void ST7789_InversionMode(Mode State)
+void ST7789_InversionMode(st7789_Mode State)
 {
 	State == ON ? ST7789_SendCmd(ST7789_Cmd_INVON) : ST7789_SendCmd(ST7789_Cmd_INVOFF);
 }
 /**********************************************************************/
-void ST7789_Orientation(Orientation State)
+void ST7789_Orientation(st7789_Orientation State)
 {
 	uint8_t data = 0;
 	ST7789_SendCmd(ST7789_Cmd_MADCTL);
@@ -181,13 +181,13 @@ void ST7789_PrintScreen(void)
 /**********************************************************************
  *		    High level functions for drawing primitives
  *********************************************************************/
-void ST7789_DrawFillScreen(uint16_t color, action act)
+void ST7789_DrawFillScreen(uint16_t color, st7789_Action act)
 {
 	ST7789_DrawFillRect(0, 0, lcd_X_max, lcd_Y_max, color, act);
 }
 
 /**********************************************************************/
-void ST7789_DrawFillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, action act)
+void ST7789_DrawFillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, st7789_Action act)
 {
 	if ((x >= lcd_X_max) || (y >= lcd_Y_max)) return;
 	if ((x + w) > lcd_X_max) w = lcd_X_max - x;
@@ -206,7 +206,7 @@ void ST7789_DrawFillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t co
 }
 
 /**********************************************************************/
-void ST7789_DrawLine_Slow(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, action act)
+void ST7789_DrawLine_Slow(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, st7789_Action act)
 {
 	const int16_t deltaX = abs(x1 - x0);
 	const int16_t deltaY = abs(y1 - y0);
@@ -240,7 +240,7 @@ void ST7789_DrawLine_Slow(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16
 }
 
 /**********************************************************************/
-void ST7789_DrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, action act)
+void ST7789_DrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, st7789_Action act)
 {
 // Horizontal line
 	if (x0 == x1)
@@ -262,7 +262,7 @@ void ST7789_DrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t co
 }
 
 /**********************************************************************/
-void ST7789_DrawRect(int16_t x, int16_t y, int16_t h, int16_t w, uint16_t color, action act)
+void ST7789_DrawRect(int16_t x, int16_t y, int16_t h, int16_t w, uint16_t color, st7789_Action act)
 {
 	ST7789_DrawLine(x, y, x, y + w, color, act);
 	ST7789_DrawLine(x + h, y, x + h, y + w, color, act);
@@ -270,7 +270,7 @@ void ST7789_DrawRect(int16_t x, int16_t y, int16_t h, int16_t w, uint16_t color,
 	ST7789_DrawLine(x, y + w, x + h, y + w, color, act);
 }
 /**********************************************************************/
-void ST7789_DrawRectCoordinates(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, action act)
+void ST7789_DrawRectCoordinates(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, st7789_Action act)
 {
 	ST7789_DrawLine(x0, y0, x0, y1, color, act);
 	ST7789_DrawLine(x1, y0, x1, y1, color, act);
@@ -279,7 +279,7 @@ void ST7789_DrawRectCoordinates(int16_t x0, int16_t y0, int16_t x1, int16_t y1, 
 }
 
 /**********************************************************************/
-void ST7789_DrawCircleFilled(int16_t x0, int16_t y0, int16_t radius, uint16_t color, action act)
+void ST7789_DrawCircleFilled(int16_t x0, int16_t y0, int16_t radius, uint16_t color, st7789_Action act)
 {
 	int16_t x = 0;
 	int16_t y = radius;
@@ -318,7 +318,7 @@ void ST7789_DrawCircleFilled(int16_t x0, int16_t y0, int16_t radius, uint16_t co
 }
 
 /**********************************************************************/
-void ST7789_DrawCircle(int16_t x0, int16_t y0, int16_t radius, uint16_t color, action act)
+void ST7789_DrawCircle(int16_t x0, int16_t y0, int16_t radius, uint16_t color, st7789_Action act)
 {
 	int16_t x = 0;
 	int16_t y = radius;
@@ -362,7 +362,7 @@ void ST7789_DrawCircle(int16_t x0, int16_t y0, int16_t radius, uint16_t color, a
 }
 
 /**********************************************************************/
-void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, action act)
+void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act)
 {
 	if ((x >= lcd_X_max) || (y >= lcd_Y_max) || ((x + 4) < 0) || ((y + 7) < 0)) return;
 
@@ -381,7 +381,27 @@ void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char
 
 		for (uint8_t j = 0; j < 8; j++)
 		{
-			if (coloumn & 0x01) ST7789_SavePixel(x + i, y + j, TextColor);
+			if (coloumn & 0x01)
+			{
+				switch (Rotate) {
+				case Normal:
+				{
+					ST7789_SavePixel(x + i, y + j, TextColor);
+				}
+					break;
+
+				case Left:
+				{
+
+				}
+					break;
+				case Right:
+				{
+
+				}
+					break;
+				}
+			}
 			coloumn >>= 1;
 		}
 	}
@@ -390,7 +410,7 @@ void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char
 }
 
 /**********************************************************************/
-void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, action act)
+void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act)
 {
 	uint8_t buffer[11];
 
@@ -409,7 +429,34 @@ void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned cha
 	{
 		for (uint8_t i = 0; i < 7; i++)
 		{
-			if ((buffer[j] & (1 << i)) != 0) ST7789_SavePixel(x + i, y + j, TextColor);
+			if ((buffer[j] & (1 << i)) != 0)
+			{
+
+				switch (Rotate) {
+				case Normal:
+				{
+					ST7789_SavePixel(x + i, y + j, TextColor);
+					break;
+				}
+
+				case Left:
+				{
+
+					break;
+				}
+				case Right:
+				{
+//					lcd_X_max, lcd_Y_max
+
+
+
+					ST7789_SavePixel(lcd_X_max - (y + j), x + i, TextColor);
+
+//					ST7789_SavePixel(x + i, y + j, TextColor);
+					break;
+				}
+				}
+			}
 		}
 	}
 	if (act == updateElement) ST7789_PrintElement(x, y, x + 7, y + 11);
@@ -417,7 +464,7 @@ void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned cha
 }
 
 /**********************************************************************/
-void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, action act)
+void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act)
 {
 	int16_t x0 = x, y0 = y;
 	unsigned char type = *str;
@@ -425,7 +472,7 @@ void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, ac
 	if (type >= 128) x = x - 3;
 	while (*str)
 	{
-		ST7789_DrawChar_5x8(x, y, TextColor, *str++, updateVRAM);
+		ST7789_DrawChar_5x8(x, y, TextColor, *str++, Rotate, updateVRAM);
 		type = *str;
 		if (type >= 128) x = x + 3;
 		else x = x + 6;
@@ -436,7 +483,7 @@ void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, ac
 }
 
 /**********************************************************************/
-void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, action act)
+void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act)
 {
 	int16_t x0 = x, y0 = y;
 	unsigned char type = *str;
@@ -444,7 +491,7 @@ void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, a
 	if (type >= 128) x = x - 3;
 	while (*str)
 	{
-		ST7789_DrawChar_7x11(x, y, TextColor, *str++, updateVRAM);
+		ST7789_DrawChar_7x11(x, y, TextColor, *str++, Rotate, updateVRAM);
 		type = *str;
 		if (type >= 128) x = x + 4;
 		else x = x + 8;

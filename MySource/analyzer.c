@@ -24,13 +24,14 @@ extern UART_HandleTypeDef huart1;
 
 arm_rfft_fast_instance_f32 fft_struct;
 
-int16_t rx_buff, tx_buff; //tx_buff фиктивная переменная для запуска работы SPI на прием
+int16_t rx_buff, tx_buff;		//tx_buff фиктивная переменная для запуска работы SPI на прием
 float32_t adc_buf[FHT_LEN / 2];
 float32_t fft_in_buf_1[FHT_LEN], fft_in_buf_2[FHT_LEN];
 float32_t fft_in_buf[FHT_LEN];
 float32_t fft_out_buf[FHT_LEN];
 
 xSemaphoreHandle Semaph_data_ready;
+xSemaphoreHandle Semaph_CPU_load;
 xQueueHandle Queue_encoder;
 xQueueHandle Queue_menu_navigate;
 
@@ -42,53 +43,174 @@ void processingTask(void const *argument);
 void menuTask(void const *argument);
 void buttEncTask(void const *argument);
 
-/*** DUMMY CODE ***/
 typedef enum {
-	BUTTON_NONE, BUTTON_PREVIOUS, BUTTON_NEXT, BUTTON_PARENT, BUTTON_CHILD, BUTTON_ENTER,
+	BUTTON_NONE,
+	BUTTON_PREVIOUS,
+	BUTTON_NEXT,
+	BUTTON_PARENT,
+	BUTTON_CHILD,
+	BUTTON_ENTER
 } ButtonValues;
 
-ButtonValues GetButtonPress(void)
-{
-	return BUTTON_NONE;
-}
-/*** END DUMMY CODE ***/
+typedef enum {
+	MODE_ANALYZER,
+	MODE_SCOPE,
+	MODE_AUDIO_SPECTR
+} Mode;
 
-/** Example menu item specific enter callback function, run when the associated menu item is entered. */
-static void Level1Item1_Enter(void)
+Mode globalMode = MODE_ANALYZER;
+
+uint8_t globalOffset = 0;
+float globalScale = 1;
+uint8_t globalInput = 0;
+
+volatile static uint8_t CPU_IDLE = 0;
+
+char pcWriteBuffer[1024];
+char loadWriteBuffer[1024];
+uint32_t freemem;
+char buff[30];
+
+extern uint16_t lcd_X_max, lcd_Y_max;
+
+/***********************************************************/
+uint8_t GetCPU_IDLE()
 {
-	ST7789_DrawFillRect(10, 30, 128, 11, BLACK, updateVRAM);
-	ST7789_DrawText_7x11(10, 30, WHITE, "Enter", updateScreen);
-//	puts("ENTER");
+	return CPU_IDLE;
+}
+/***********************************************************/
+void vApplicationIdleHook()
+{
+	static portTickType LastTick = 0;
+	static uint32_t count;			//наш трудяга счетчик
+	static uint32_t max_count;//максимальное значение счетчика, вычисляется при калибровке и соответствует 100% CPU idle
+
+	count++;						//приращение счетчика
+
+	if (xTaskGetTickCount() - LastTick > 400)
+	{ //если прошло 1000 тиков (1 сек для моей платфрмы)
+		LastTick = xTaskGetTickCount();
+		if (count > max_count) max_count = count;         //это калибровка
+		CPU_IDLE = 100 * (max_count - count) / max_count;               //вычисляем текущую загрузку
+		count = 0;               //обнуляем счетчик
+		xSemaphoreGive(Semaph_CPU_load);
+	}
 }
 
-/** Example menu item specific select callback function, run when the associated menu item is selected. */
-static void Level1Item1_Select(void)
+/***********************************************************/
+static void constrain(int8_t *parameter, int8_t min, int8_t max)
 {
-	ST7789_DrawFillRect(10, 30, 128, 11, BLACK, updateVRAM);
-	ST7789_DrawText_7x11(10, 30, WHITE, "Select", updateScreen);
-//	puts("SELECT");
+	if (*parameter < min)
+	{
+		*parameter = max;
+		return;
+	}
+	if (*parameter > max)
+	{
+		*parameter = min;
+		return;
+	}
+	return;
+}
+/***********************************************************/
+static int8_t readEncoder()
+{
+	ButtonValues Value = BUTTON_NONE;
+	portBASE_TYPE xStatus;
+
+	xStatus = xQueueReceive(Queue_menu_navigate, &Value, 100);
+	if (xStatus == pdPASS)
+	{
+		if (Value == BUTTON_NEXT) return 1;
+		if (Value == BUTTON_PREVIOUS) return -1;
+	}
+	return 0;
+}
+
+/***********************************************************/
+static void modeMain(void)
+{
+	switch (globalMode) {
+	case MODE_ANALYZER:
+		sprintf(buff, "Analyzer");
+		break;
+	case MODE_SCOPE:
+		sprintf(buff, "Scope");
+		break;
+	case MODE_AUDIO_SPECTR:
+		sprintf(buff, "Audio");
+		break;
+	}
+	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateScreen);
+}
+/***********************************************************/
+static void noiseMain(void)
+{
+	snprintf(buff, sizeof(buff), "%d", globalOffset);
+	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateScreen);
+}
+/***********************************************************/
+static void scaleMain(void)
+{
+	snprintf(buff, sizeof(buff), "%0.1f", globalScale);
+	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateScreen);
+}
+/***********************************************************/
+static void inputMain(void)
+{
+	snprintf(buff, sizeof(buff), "%d", globalInput);
+	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateScreen);
+}
+
+/***********************************************************/
+static void modeSelect(void)
+{
+	globalMode += readEncoder();
+	constrain((int8_t*) &globalMode, 0, 2);
+	modeMain();
+}
+/***********************************************************/
+static void noiseSelect(void)
+{
+	globalOffset += readEncoder();
+	constrain((int8_t*) &globalOffset, 0, 100);
+	noiseMain();
+}
+/***********************************************************/
+static void scaleSelect(void)
+{
+	globalScale += (float) readEncoder() / 10;
+	scaleMain();
+}
+/***********************************************************/
+static void inputSelect(void)
+{
+	globalInput += readEncoder();
+	constrain((int8_t*) &globalInput, 0, 2);
+	inputMain();
 }
 
 /** Generic function to write the text of a menu.
- *
- *  \param[in] Text   Text of the selected menu to write, in \ref MENU_ITEM_STORAGE memory space
+ *  \param[in] Text   Text of the selected menu to write
  */
 static void Generic_Write(const char *Text)
 {
 	if (Text)
 	{
-		ST7789_DrawFillRect(10, 10, 128, 11, BLACK, updateVRAM);
-		ST7789_DrawText_7x11(10, 10, WHITE, (char*)Text, updateScreen);
+		ST7789_DrawFillRect(lcd_X_max - 20, 10, 11, lcd_Y_max - 10, BLACK, updateVRAM);
+		ST7789_DrawText_7x11(10, 10, WHITE, (char*) Text, Right, updateScreen);
 	}
-//		puts(Text);
 }
 
-MENU_ITEM(Menu_1, Menu_2, Menu_3, NULL_MENU, Menu_1_1, Level1Item1_Select, Level1Item1_Enter, "Func 1");
-MENU_ITEM(Menu_2, Menu_3, Menu_1, NULL_MENU, NULL_MENU, NULL, NULL, "Func 2");
-MENU_ITEM(Menu_3, Menu_1, Menu_2, NULL_MENU, NULL_MENU, NULL, NULL, "Func 3");
+MENU_ITEM(Menu_1, Menu_2, Menu_4, NULL_MENU, Menu_1_1, modeMain, NULL, "1.Mode:");
+MENU_ITEM(Menu_2, Menu_3, Menu_1, NULL_MENU, Menu_2_1, noiseMain, NULL, "2.Noise:");
+MENU_ITEM(Menu_3, Menu_4, Menu_2, NULL_MENU, Menu_3_1, scaleMain, NULL, "3.Scale:");
+MENU_ITEM(Menu_4, Menu_1, Menu_3, NULL_MENU, Menu_4_1, inputMain, NULL, "4.Input:");
 
-MENU_ITEM(Menu_1_1, Menu_1_2, Menu_1_2, Menu_1, NULL_MENU, NULL, NULL, "1.1");
-MENU_ITEM(Menu_1_2, Menu_1_1, Menu_1_1, Menu_1, NULL_MENU, NULL, NULL, "1.2");
+MENU_ITEM(Menu_1_1, Menu_1_1, Menu_1_1, NULL_MENU, Menu_1, modeSelect, NULL, "1.Mode->");
+MENU_ITEM(Menu_2_1, Menu_2_1, Menu_2_1, NULL_MENU, Menu_2, noiseSelect, NULL, "2.Noise->");
+MENU_ITEM(Menu_3_1, Menu_3_1, Menu_3_1, NULL_MENU, Menu_3, scaleSelect, NULL, "3.Scale->");
+MENU_ITEM(Menu_4_1, Menu_4_1, Menu_4_1, NULL_MENU, Menu_4, inputSelect, NULL, "4.Input->");
 
 /***********************************************************/
 void menuInit()
@@ -104,8 +226,9 @@ void RTOScreate()
 	TaskHandle_t xHandle = NULL;
 
 	vSemaphoreCreateBinary(Semaph_data_ready);
+	vSemaphoreCreateBinary(Semaph_CPU_load);
 	Queue_encoder = xQueueCreate(1, sizeof(int8_t));
-	Queue_menu_navigate = xQueueCreate(5, sizeof(ButtonValues));
+	Queue_menu_navigate = xQueueCreate(1, sizeof(ButtonValues));
 
 	if ((Queue_encoder != NULL) && (Semaph_data_ready != NULL) && (Queue_menu_navigate != NULL))
 	{
@@ -115,11 +238,11 @@ void RTOScreate()
 		if (xReturned != pdPASS) Error_Handler();
 		xReturned = xTaskCreate((void*) debugTask, "Debug Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 		if (xReturned != pdPASS) Error_Handler();
-		xReturned = xTaskCreate((void*) menuTask, "Menu Task", configMINIMAL_STACK_SIZE*10, NULL, 1, NULL);
+		xReturned = xTaskCreate((void*) menuTask, "Menu Task", configMINIMAL_STACK_SIZE * 10, NULL, 1, NULL);
 		if (xReturned != pdPASS) Error_Handler();
 		xReturned = xTaskCreate((void*) buttEncTask, "Button enc Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 		if (xReturned != pdPASS) Error_Handler();
-		xReturned = xTaskCreate((void*) processingTask, "Processing Task", configMINIMAL_STACK_SIZE * 10, NULL, 1, &xHandle);
+		xReturned = xTaskCreate((void*) processingTask, "FFT Task", configMINIMAL_STACK_SIZE * 10, NULL, 2, &xHandle);
 		if (xReturned != pdPASS) Error_Handler();
 
 		vTaskStartScheduler();
@@ -129,15 +252,16 @@ void RTOScreate()
 /***********************************************************/
 void menuTask(void const *argument)
 {
+	vTaskDelay(500);
+	ButtonValues Value = BUTTON_NONE;
+	menuInit();
+
 	for (;;)
 	{
-		/* Example usage of MicroMenu - here you can create your custom menu navigation system; you may wish to perform
-		 * other tasks while detecting key presses, enter sleep mode while waiting for user input, etc.
-		 */
-		ButtonValues Value = BUTTON_NONE;
 		portBASE_TYPE xStatus;
 
-		xStatus = xQueueReceive(Queue_menu_navigate, &Value, 0);
+		//подглядываем за элементом в очереди, т.к. он пригодится в функциях меню
+		xStatus = xQueuePeek(Queue_menu_navigate, &Value, 100);
 
 		if (xStatus == pdPASS)
 		{
@@ -161,6 +285,8 @@ void menuTask(void const *argument)
 				break;
 			}
 		}
+		//если никто не прочел элемент, то удаляем его
+		xQueueReset(Queue_menu_navigate);
 	}
 	vTaskDelete(NULL);
 }
@@ -168,13 +294,14 @@ void menuTask(void const *argument)
 /***********************************************************/
 void buttEncTask(void const *argument)
 {
+	vTaskDelay(500);
+	ButtonValues Value = BUTTON_NONE;
+
 	for (;;)
 	{
-		ButtonValues Value = BUTTON_NONE;
-
 		if (HAL_GPIO_ReadPin(Butt_enc_GPIO_Port, Butt_enc_Pin) == 0)
 		{
-			vTaskDelay(20);
+			vTaskDelay(10);
 			if (HAL_GPIO_ReadPin(Butt_enc_GPIO_Port, Butt_enc_Pin) == 0) Value = BUTTON_CHILD;
 			while (HAL_GPIO_ReadPin(Butt_enc_GPIO_Port, Butt_enc_Pin) == 0)
 			{
@@ -191,7 +318,7 @@ void buttEncTask(void const *argument)
 			xQueueSendToBack(Queue_menu_navigate, &Value, 10);
 			while (HAL_GPIO_ReadPin(Butt_enc_GPIO_Port, Butt_enc_Pin) == 0);
 		}
-		vTaskDelay(50);
+		vTaskDelay(10);
 	}
 	vTaskDelete(NULL);
 }
@@ -199,12 +326,13 @@ void buttEncTask(void const *argument)
 /***********************************************************/
 void encoderTask(void const *argument)
 {
+	vTaskDelay(500);
 	static uint8_t prevCounter = 0;
 	ButtonValues Value = BUTTON_NONE;
 
 	for (;;)
 	{
-		uint8_t currCounter = __HAL_TIM_GET_COUNTER(&htim4)/2;
+		uint8_t currCounter = __HAL_TIM_GET_COUNTER(&htim4) / 2;
 
 		if (currCounter != prevCounter)
 		{
@@ -220,17 +348,15 @@ void encoderTask(void const *argument)
 			{
 				Value = (currCounter > prevCounter) ? BUTTON_NEXT : BUTTON_PREVIOUS;
 			}
+
 //			char buff[16];
 //			snprintf(buff, sizeof(buff), "curr %3d", currCounter);
 //			ST7789_print_7x11(10, 10, WHITE, BLACK, 0, buff);
-//			snprintf(buff, sizeof(buff), "prev %3d", prevCounter);
-//			ST7789_print_7x11(10, 25, WHITE, BLACK, 0, buff);
-//			snprintf(buff, sizeof(buff), "enc %3d", encoder);
-//			ST7789_print_7x11(10, 40, WHITE, BLACK, 0, buff);
+
 			prevCounter = currCounter;
 			xQueueSendToBack(Queue_menu_navigate, &Value, 10);
-			vTaskDelay(50);
 		}
+		vTaskDelay(50);
 	}
 	vTaskDelete(NULL);
 }
@@ -238,6 +364,7 @@ void encoderTask(void const *argument)
 /***********************************************************/
 void led1Task(void const *argument)
 {
+	vTaskDelay(500);
 	for (;;)
 	{
 		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
@@ -249,9 +376,22 @@ void led1Task(void const *argument)
 /***********************************************************/
 void debugTask(void const *argument)
 {
+	vTaskDelay(500);
 	for (;;)
 	{
-		vTaskDelay(500);
+//		vTaskList(pcWriteBuffer);
+//		freemem = xPortGetFreeHeapSize();
+//		vTaskGetRunTimeStats(loadWriteBuffer);
+
+		uint8_t loadCPU;
+		char buff[16];
+		xSemaphoreTake(Semaph_CPU_load, portMAX_DELAY);
+		loadCPU = CPU_IDLE;
+		snprintf(buff, sizeof(buff), "Load %d%%", loadCPU);
+//		ST7789_DrawFillRect(10, 60, 128, 11, BLACK, updateVRAM);
+		ST7789_DrawFillRect(lcd_X_max - 70, 10, 11, lcd_Y_max - 10, BLACK, updateVRAM);
+		ST7789_DrawText_7x11(10, 60, WHITE, buff, Right, updateScreen);
+		vTaskDelay(1000);
 	}
 	vTaskDelete(NULL);
 }
@@ -261,63 +401,71 @@ void debugTask(void const *argument)
  ***********************************************************/
 void processingTask(void const *argument)
 {
-//	portBASE_TYPE xStatus;
+	vTaskDelay(500);
 	for (;;)
 	{
 		/* Блокирующий семафор, ожидает готового семпла*/
 		xSemaphoreTake(Semaph_data_ready, portMAX_DELAY);
 
-		if (HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin) == 0)
+		if (globalMode == MODE_SCOPE)
 		{
 			for (uint16_t i = 0; i < ST7789_HEIGHT; ++i)
 			{
 				ST7789_DrawLine_for_Analyzer(i, (fft_in_buf[i] + 2047) / 32);
 			}
 		}
-		else
+		if (globalMode != MODE_SCOPE)
 		{
-
 			applyHammingWindowFloat(fft_in_buf);
 			arm_rfft_fast_f32(&fft_struct, (float32_t*) &fft_in_buf, (float32_t*) &fft_out_buf, 0);
 			arm_cmplx_mag_f32(fft_out_buf, fft_out_buf, FHT_LEN);
 
-
-//			int temp;
 			static int freqs[FHT_LEN / 2];
-//			int8_t offset, encoder;	//variable noisefloor offset
-//			/* Берем информацию о состоянии энкодера из очереди */
-//			xStatus = xQueueReceive(Queue_encoder, &encoder, 0);
-//
-//			if (xStatus == pdPASS)
-//			{
-//				offset += encoder;
-//				if (offset < 0) offset = 0;
-//			}
-
 			for (uint16_t i = 0; i < FHT_LEN / 2; ++i)
 			{
-//				temp = (int) ((20 * (log10f(fft_out_buf[i]))) - offset);
-
-				freqs[i] = (int) (20 * (log10f(fft_out_buf[i]))); // - offset;
-//				if (temp > freqs[i]) freqs[i] = temp;
-//				else freqs[i]--;
-
+				//temp = (int) ((20 * (log10f(fft_out_buf[i]))) - offset);
+				freqs[i] = (int) ((20 * (log10f(fft_out_buf[i]))) - globalOffset) * globalScale;
+				//if (temp > freqs[i]) freqs[i] = temp;
+				//else freqs[i]--;
 				if (freqs[i] < 0) freqs[i] = 0;
 			}
 
-			for (uint16_t i = 0; i < ST7789_HEIGHT; ++i)
+			if (globalMode == MODE_ANALYZER)
 			{
-				ST7789_DrawLine_for_Analyzer(i, freqs[i]);
+				for (uint16_t i = 0; i < ST7789_HEIGHT; ++i)
+				{
+					ST7789_DrawLine_for_Analyzer(i, freqs[i]);
+				}
 			}
+			if (globalMode == MODE_AUDIO_SPECTR)
+			{
+				uint32_t pIndex;
+				const uint16_t numBin[25] = { 1, 2, 3, 4, 5, 6, 7, 9, 12, 15, 19, 24, 31, 39, 50, 63, 80, 101, 127, 160,
+						202, 255, 322, 406, 510 };
 
-//			static uint16_t numBin[25] = { 1, 2, 3, 4, 5, 6, 7, 9, 12, 15, 19, 24, 31, 39, 50, 63, 80, 101, 127, 160,
-//					202, 255, 322, 406, 510 };
-//
-//			for (uint16_t i = 0; i < 25; ++i)
-//			{
-//				ST7789_DrawLine_for_Analyzer(4 + i * 6, (int16_t) (freqs[numBin[i]] * 1.5));
-//			}
+				arm_max_f32((float32_t*) &freqs[18], 3, (float32_t*) &freqs[19], &pIndex);	//11
+				arm_max_f32((float32_t*) &freqs[21], 5, (float32_t*) &freqs[24], &pIndex);	//12
+				arm_max_f32((float32_t*) &freqs[27], 7, (float32_t*) &freqs[31], &pIndex);	//13
+				arm_max_f32((float32_t*) &freqs[35], 7, (float32_t*) &freqs[39], &pIndex);	//14
+				arm_max_f32((float32_t*) &freqs[46], 9, (float32_t*) &freqs[50], &pIndex);	//15
+				arm_max_f32((float32_t*) &freqs[59], 9, (float32_t*) &freqs[63], &pIndex);	//16
+				arm_max_f32((float32_t*) &freqs[74], 13, (float32_t*) &freqs[80], &pIndex);	//17
+				arm_max_f32((float32_t*) &freqs[93], 17, (float32_t*) &freqs[101], &pIndex);	//18
+				arm_max_f32((float32_t*) &freqs[117], 21, (float32_t*) &freqs[127], &pIndex);	//19
+				arm_max_f32((float32_t*) &freqs[147], 27, (float32_t*) &freqs[160], &pIndex);	//20
+				arm_max_f32((float32_t*) &freqs[187], 31, (float32_t*) &freqs[202], &pIndex);	//21
+				arm_max_f32((float32_t*) &freqs[233], 45, (float32_t*) &freqs[255], &pIndex);	//22
+				arm_max_f32((float32_t*) &freqs[294], 57, (float32_t*) &freqs[322], &pIndex);	//23
+				arm_max_f32((float32_t*) &freqs[370], 73, (float32_t*) &freqs[406], &pIndex);	//24
+				arm_max_f32((float32_t*) &freqs[465], 46, (float32_t*) &freqs[510], &pIndex);	//25
+
+				for (uint16_t i = 0; i < 25; ++i)
+				{
+					ST7789_DrawColumn_for_Audio(i, (int16_t) (freqs[numBin[i]]));
+				}
+			}
 		}
+
 		ST7789_PrintScreen();
 	}
 	vTaskDelete(NULL);
