@@ -12,9 +12,6 @@
 
 #define FHT_LEN		1024
 
-void menuInit();
-void fftInit();
-void RTOScreate();
-void hardwareInit();
+void RTOSstart();
 
 #endif /* INC_ANALYZER_H_ */

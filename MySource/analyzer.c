@@ -17,15 +17,21 @@
 #include "queue.h"
 #include "semphr.h"
 
+#define DEBUG_TASK	1
+
 extern SPI_HandleTypeDef hspi2;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim4;
+extern TIM_HandleTypeDef htim11;
 extern UART_HandleTypeDef huart1;
+extern ADC_HandleTypeDef hadc1;
+extern I2S_HandleTypeDef hi2s3;
 
 arm_rfft_fast_instance_f32 fft_struct;
 
 int16_t rx_buff, tx_buff;		//tx_buff фиктивная переменная для запуска работы SPI на прием
 float32_t adc_buf[FHT_LEN / 2];
+uint16_t raw_adc_data[FHT_LEN * 2];	// двойной запас на 2 канала при работе с микрофоном
 float32_t fft_in_buf_1[FHT_LEN], fft_in_buf_2[FHT_LEN];
 float32_t fft_in_buf[FHT_LEN];
 float32_t fft_out_buf[FHT_LEN];
@@ -35,13 +41,22 @@ xSemaphoreHandle Semaph_CPU_load;
 xQueueHandle Queue_encoder;
 xQueueHandle Queue_menu_navigate;
 
-void SPI_DMAReceiveCplt_from_ADC(DMA_HandleTypeDef *hdma);
+void externalADC_cmpl_callback(DMA_HandleTypeDef *hdma);
 void led1Task(void const *argument);
 void encoderTask(void const *argument);
+#if (DEBUG_TASK == 1)
 void debugTask(void const *argument);
-void processingTask(void const *argument);
+#endif
+void fftTask(void const *argument);
 void menuTask(void const *argument);
 void buttEncTask(void const *argument);
+
+void internalADC_Init();
+void internalADC_Deinit();
+void externalADC_Init();
+void externalADC_Deinit();
+void microphone_Init();
+void microphone_Deinit();
 
 typedef enum {
 	BUTTON_NONE,
@@ -58,45 +73,57 @@ typedef enum {
 	MODE_AUDIO_SPECTR
 } Mode;
 
+typedef enum {
+	INPUT_EXT_ADC,
+	INPUT_INT_ADC,
+	INPUT_MICRO
+} Input;
+
+/* Settings parameters */
 Mode globalMode = MODE_ANALYZER;
-
-uint8_t globalOffset = 0;
+Input globalInput = INPUT_EXT_ADC;
+uint8_t globalNoise = 0;
 float globalScale = 1;
-uint8_t globalInput = 0;
 
+/* Debug variables*/
+#if (DEBUG_TASK == 1)
 volatile static uint8_t CPU_IDLE = 0;
-
 char pcWriteBuffer[1024];
 char loadWriteBuffer[1024];
 uint32_t freemem;
+#endif
+
 char buff[30];
 
 extern uint16_t lcd_X_max, lcd_Y_max;
 
+#if (DEBUG_TASK == 1)
 /***********************************************************/
 uint8_t GetCPU_IDLE()
 {
 	return CPU_IDLE;
 }
+#endif
 /***********************************************************/
 void vApplicationIdleHook()
 {
+#if (DEBUG_TASK == 1)
 	static portTickType LastTick = 0;
 	static uint32_t count;			//наш трудяга счетчик
 	static uint32_t max_count;//максимальное значение счетчика, вычисляется при калибровке и соответствует 100% CPU idle
 
 	count++;						//приращение счетчика
 
-	if (xTaskGetTickCount() - LastTick > 400)
-	{ //если прошло 1000 тиков (1 сек для моей платфрмы)
+	if (xTaskGetTickCount() - LastTick > 400)						//если прошло 400 тиков
+	{
 		LastTick = xTaskGetTickCount();
-		if (count > max_count) max_count = count;         //это калибровка
-		CPU_IDLE = 100 * (max_count - count) / max_count;               //вычисляем текущую загрузку
-		count = 0;               //обнуляем счетчик
+		if (count > max_count) max_count = count;         	//это калибровка
+		CPU_IDLE = 100 * (max_count - count) / max_count;	//вычисляем текущую загрузку
+		count = 0;               							//обнуляем счетчик
 		xSemaphoreGive(Semaph_CPU_load);
 	}
+#endif
 }
-
 /***********************************************************/
 static void constrain(int8_t *parameter, int8_t min, int8_t max)
 {
@@ -126,7 +153,6 @@ static int8_t readEncoder()
 	}
 	return 0;
 }
-
 /***********************************************************/
 static void modeMain(void)
 {
@@ -141,27 +167,53 @@ static void modeMain(void)
 		sprintf(buff, "Audio");
 		break;
 	}
-	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateScreen);
+	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateVRAM);
 }
 /***********************************************************/
 static void noiseMain(void)
 {
-	snprintf(buff, sizeof(buff), "%d", globalOffset);
-	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateScreen);
+	snprintf(buff, sizeof(buff), "%d", globalNoise);
+	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateVRAM);
 }
 /***********************************************************/
 static void scaleMain(void)
 {
 	snprintf(buff, sizeof(buff), "%0.1f", globalScale);
-	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateScreen);
+	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateVRAM);
 }
 /***********************************************************/
 static void inputMain(void)
 {
-	snprintf(buff, sizeof(buff), "%d", globalInput);
-	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateScreen);
-}
+	switch (globalInput) {
+	case INPUT_EXT_ADC:
+	{
+		internalADC_Deinit();
+		microphone_Deinit();
+		externalADC_Init();
+		sprintf(buff, "External ADC");
+	}
+		break;
+	case INPUT_INT_ADC:
+	{
+		externalADC_Deinit();
+		microphone_Deinit();
+		internalADC_Init();
+		sprintf(buff, "Internal ADC");
+	}
+		break;
+	case INPUT_MICRO:
+	{
+		internalADC_Deinit();
+		externalADC_Deinit();
+		microphone_Init();
+		sprintf(buff, "Microphone");
+	}
+		break;
+	}
 
+//	snprintf(buff, sizeof(buff), "%d", globalInput);
+	ST7789_DrawText_7x11(82, 10, WHITE, buff, Right, updateVRAM);
+}
 /***********************************************************/
 static void modeSelect(void)
 {
@@ -172,8 +224,8 @@ static void modeSelect(void)
 /***********************************************************/
 static void noiseSelect(void)
 {
-	globalOffset += readEncoder();
-	constrain((int8_t*) &globalOffset, 0, 100);
+	globalNoise += readEncoder();
+	constrain((int8_t*) &globalNoise, 0, 126);
 	noiseMain();
 }
 /***********************************************************/
@@ -198,7 +250,7 @@ static void Generic_Write(const char *Text)
 	if (Text)
 	{
 		ST7789_DrawFillRect(lcd_X_max - 20, 10, 11, lcd_Y_max - 10, BLACK, updateVRAM);
-		ST7789_DrawText_7x11(10, 10, WHITE, (char*) Text, Right, updateScreen);
+		ST7789_DrawText_7x11(10, 10, WHITE, (char*) Text, Right, updateVRAM);
 	}
 }
 
@@ -220,7 +272,7 @@ void menuInit()
 }
 
 /***********************************************************/
-void RTOScreate()
+void RTOSstart()
 {
 	BaseType_t xReturned;
 	TaskHandle_t xHandle = NULL;
@@ -236,13 +288,15 @@ void RTOScreate()
 		if (xReturned != pdPASS) Error_Handler();
 		xReturned = xTaskCreate((void*) encoderTask, "Encoder Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 		if (xReturned != pdPASS) Error_Handler();
+#if (DEBUG_TASK == 1)
 		xReturned = xTaskCreate((void*) debugTask, "Debug Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 		if (xReturned != pdPASS) Error_Handler();
+#endif
 		xReturned = xTaskCreate((void*) menuTask, "Menu Task", configMINIMAL_STACK_SIZE * 10, NULL, 1, NULL);
 		if (xReturned != pdPASS) Error_Handler();
 		xReturned = xTaskCreate((void*) buttEncTask, "Button enc Task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 		if (xReturned != pdPASS) Error_Handler();
-		xReturned = xTaskCreate((void*) processingTask, "FFT Task", configMINIMAL_STACK_SIZE * 10, NULL, 2, &xHandle);
+		xReturned = xTaskCreate((void*) fftTask, "FFT Task", configMINIMAL_STACK_SIZE * 10, NULL, 2, &xHandle);
 		if (xReturned != pdPASS) Error_Handler();
 
 		vTaskStartScheduler();
@@ -252,9 +306,13 @@ void RTOScreate()
 /***********************************************************/
 void menuTask(void const *argument)
 {
+#if (DEBUG_TASK == 1)
 	vTaskDelay(500);
+#endif
 	ButtonValues Value = BUTTON_NONE;
+
 	menuInit();
+	externalADC_Init();
 
 	for (;;)
 	{
@@ -294,7 +352,9 @@ void menuTask(void const *argument)
 /***********************************************************/
 void buttEncTask(void const *argument)
 {
+#if (DEBUG_TASK == 1)
 	vTaskDelay(500);
+#endif
 	ButtonValues Value = BUTTON_NONE;
 
 	for (;;)
@@ -326,9 +386,12 @@ void buttEncTask(void const *argument)
 /***********************************************************/
 void encoderTask(void const *argument)
 {
+#if (DEBUG_TASK == 1)
 	vTaskDelay(500);
+#endif
 	static uint8_t prevCounter = 0;
 	ButtonValues Value = BUTTON_NONE;
+	HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
 
 	for (;;)
 	{
@@ -349,10 +412,6 @@ void encoderTask(void const *argument)
 				Value = (currCounter > prevCounter) ? BUTTON_NEXT : BUTTON_PREVIOUS;
 			}
 
-//			char buff[16];
-//			snprintf(buff, sizeof(buff), "curr %3d", currCounter);
-//			ST7789_print_7x11(10, 10, WHITE, BLACK, 0, buff);
-
 			prevCounter = currCounter;
 			xQueueSendToBack(Queue_menu_navigate, &Value, 10);
 		}
@@ -364,7 +423,9 @@ void encoderTask(void const *argument)
 /***********************************************************/
 void led1Task(void const *argument)
 {
+#if (DEBUG_TASK == 1)
 	vTaskDelay(500);
+#endif
 	for (;;)
 	{
 		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
@@ -374,48 +435,117 @@ void led1Task(void const *argument)
 }
 
 /***********************************************************/
+#if (DEBUG_TASK == 1)
 void debugTask(void const *argument)
 {
 	vTaskDelay(500);
+	HAL_TIM_Base_Start_IT(&htim11);	//to estimate processor load and time consumption of tasks
 	for (;;)
 	{
-//		vTaskList(pcWriteBuffer);
-//		freemem = xPortGetFreeHeapSize();
-//		vTaskGetRunTimeStats(loadWriteBuffer);
+		vTaskList(pcWriteBuffer);
+		freemem = xPortGetFreeHeapSize();
+		vTaskGetRunTimeStats(loadWriteBuffer);
 
 		uint8_t loadCPU;
 		char buff[16];
 		xSemaphoreTake(Semaph_CPU_load, portMAX_DELAY);
 		loadCPU = CPU_IDLE;
 		snprintf(buff, sizeof(buff), "Load %d%%", loadCPU);
-//		ST7789_DrawFillRect(10, 60, 128, 11, BLACK, updateVRAM);
 		ST7789_DrawFillRect(lcd_X_max - 70, 10, 11, lcd_Y_max - 10, BLACK, updateVRAM);
-		ST7789_DrawText_7x11(10, 60, WHITE, buff, Right, updateScreen);
+		ST7789_DrawText_7x11(10, 60, WHITE, buff, Right, updateVRAM);
 		vTaskDelay(1000);
 	}
 	vTaskDelete(NULL);
 }
+#endif
 
 /************************************************************
  *		FFT преобразование и вывод на дисплей
  ***********************************************************/
-void processingTask(void const *argument)
+void fftTask(void const *argument)
 {
+#if (DEBUG_TASK == 1)
 	vTaskDelay(500);
+#endif
+
+	static uint8_t State = 0;
+	arm_rfft_fast_init_f32(&fft_struct, FHT_LEN);
+
 	for (;;)
 	{
 		/* Блокирующий семафор, ожидает готового семпла*/
 		xSemaphoreTake(Semaph_data_ready, portMAX_DELAY);
 
+		/* sliding window algorithm */
+		switch (State) {
+		case 0:
+		{
+			State = 1;
+			arm_copy_f32(adc_buf, &fft_in_buf_1[FHT_LEN / 2], FHT_LEN / 2);
+			arm_copy_f32(&fft_in_buf_1[FHT_LEN / 2], fft_in_buf_2, FHT_LEN / 2);
+			arm_copy_f32(fft_in_buf_1, fft_in_buf, FHT_LEN);
+			break;
+		}
+		case 1:
+		{
+			State = 2;
+			arm_copy_f32(adc_buf, fft_in_buf_1, FHT_LEN / 2);
+			arm_copy_f32(fft_in_buf_1, &fft_in_buf_2[FHT_LEN / 2], FHT_LEN / 2);
+			arm_copy_f32(fft_in_buf_2, fft_in_buf, FHT_LEN);
+			break;
+		}
+		case 2:
+		{
+			State = 3;
+			arm_copy_f32(adc_buf, &fft_in_buf_1[FHT_LEN / 2], FHT_LEN / 2);
+			arm_copy_f32(&fft_in_buf_1[FHT_LEN / 2], fft_in_buf_2, FHT_LEN / 2);
+			arm_copy_f32(fft_in_buf_1, fft_in_buf, FHT_LEN);
+			break;
+		}
+		case 3:
+		{
+			State = 0;
+			arm_copy_f32(adc_buf, fft_in_buf_1, FHT_LEN / 2);
+			arm_copy_f32(fft_in_buf_1, &fft_in_buf_2[FHT_LEN / 2], FHT_LEN / 2);
+			arm_copy_f32(fft_in_buf_2, fft_in_buf, FHT_LEN);
+			break;
+		}
+		}
+
+		if (globalInput == INPUT_MICRO)
+		{
+			for (uint16_t i = 0; i < FHT_LEN; ++i)
+			{
+				if (fft_in_buf[i] < 8388608.0) fft_in_buf[i] += 8388608.0;
+				else if (fft_in_buf[i] > 8388608.0) fft_in_buf[i] -= 8388608.0;
+			}
+
+		}
+
 		if (globalMode == MODE_SCOPE)
 		{
 			for (uint16_t i = 0; i < ST7789_HEIGHT; ++i)
 			{
-				ST7789_DrawLine_for_Analyzer(i, (fft_in_buf[i] + 2047) / 32);
+				if (globalInput != INPUT_MICRO)
+				{
+					ST7789_DrawLine_for_Analyzer(i, fft_in_buf[i] / 32);
+				}
+				else
+				{
+					ST7789_DrawLine_for_Analyzer(i, fft_in_buf[i] / 131072);
+				}
 			}
 		}
-		if (globalMode != MODE_SCOPE)
+		else
 		{
+			if (globalInput != INPUT_MICRO)
+			{
+				for (uint16_t i = 0; i < FHT_LEN; ++i)
+				{
+					fft_in_buf[i] -= 2048.0; 	//делаем двуполярный сигнал
+				}
+			}
+
 			applyHammingWindowFloat(fft_in_buf);
 			arm_rfft_fast_f32(&fft_struct, (float32_t*) &fft_in_buf, (float32_t*) &fft_out_buf, 0);
 			arm_cmplx_mag_f32(fft_out_buf, fft_out_buf, FHT_LEN);
@@ -424,7 +554,7 @@ void processingTask(void const *argument)
 			for (uint16_t i = 0; i < FHT_LEN / 2; ++i)
 			{
 				//temp = (int) ((20 * (log10f(fft_out_buf[i]))) - offset);
-				freqs[i] = (int) ((20 * (log10f(fft_out_buf[i]))) - globalOffset) * globalScale;
+				freqs[i] = (int) ((20 * (log10f(fft_out_buf[i]))) - globalNoise) * globalScale;
 				//if (temp > freqs[i]) freqs[i] = temp;
 				//else freqs[i]--;
 				if (freqs[i] < 0) freqs[i] = 0;
@@ -465,25 +595,24 @@ void processingTask(void const *argument)
 				}
 			}
 		}
-
 		ST7789_PrintScreen();
 	}
 	vTaskDelete(NULL);
 }
 
-/***********************************************************/
-void fftInit()
-{
-	arm_rfft_fast_init_f32(&fft_struct, FHT_LEN);
-}
-
 /************************************************************
  *    Конфигурирование каналов DMA, запуск SPI и TIM
  ***********************************************************/
-void hardwareInit()
+void externalADC_Init()
 {
+//	static uint8_t first_time_flag = 1;
+
+//	if(first_time_flag)
+//	{
+//		first_time_flag = 0;
+
 	/* Указатель на функцию обратного вызова по окончанию работы DMA */
-	hspi2.hdmarx->XferCpltCallback = SPI_DMAReceiveCplt_from_ADC;
+	hspi2.hdmarx->XferCpltCallback = externalADC_cmpl_callback;
 	/* Настройка DMA на передачу от SPI2 в память по приему данных */
 	HAL_DMA_Start_IT(hspi2.hdmarx, (uint32_t) &hspi2.Instance->DR, (uint32_t) &rx_buff, 1);
 	/* Установка бита разрешения дергать DMA по принятию данных в регистр SPI_DR*/
@@ -496,61 +625,35 @@ void hardwareInit()
 	__HAL_TIM_ENABLE_DMA(&htim2, TIM_DMA_UPDATE);
 	/* Запуск таймера в режиме PWM для генерации на канале 1 сигнала NSS для SPI*/
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+//	}
+//	else
+//	{
+//
+//	}
 }
-
 /**********************************************************/
-void SPI_DMAReceiveCplt_from_ADC(DMA_HandleTypeDef *hdma)
+void externalADC_Deinit()
+{
+	__HAL_SPI_DISABLE(&hspi2);
+	__HAL_TIM_DISABLE_DMA(&htim2, TIM_DMA_UPDATE);
+	HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+}
+/***********************************************************
+ * 			externalADC_cmpl_callback
+ ***********************************************************/
+void externalADC_cmpl_callback(DMA_HandleTypeDef *hdma)
 {
 	if (hdma->Instance == DMA1_Stream3)
 	{
 		static uint16_t i;
-		static uint8_t State = 0;
 
 		/* Подготовка данных*/
-		adc_buf[i] = (float) (((rx_buff & 0x1FFE) >> 1) - 2047);
+		adc_buf[i] = (rx_buff & 0x1FFE) >> 1;
 
 		i++;
 		if (i == FHT_LEN / 2)
 		{
 			i = 0;
-
-			switch (State) {
-			case 0:
-			{
-				State = 1;
-				arm_copy_f32(adc_buf, &fft_in_buf_1[FHT_LEN / 2], FHT_LEN / 2);
-				arm_copy_f32(adc_buf, fft_in_buf_2, FHT_LEN / 2);
-				arm_copy_f32(fft_in_buf_1, fft_in_buf, FHT_LEN);
-				break;
-			}
-			case 1:
-			{
-				State = 2;
-				arm_copy_f32(adc_buf, fft_in_buf_1, FHT_LEN / 2);
-				arm_copy_f32(adc_buf, &fft_in_buf_2[FHT_LEN / 2], FHT_LEN / 2);
-				arm_copy_f32(fft_in_buf_2, fft_in_buf, FHT_LEN);
-				break;
-			}
-			case 2:
-			{
-				State = 3;
-				arm_copy_f32(adc_buf, &fft_in_buf_1[FHT_LEN / 2], FHT_LEN / 2);
-				arm_copy_f32(adc_buf, fft_in_buf_2, FHT_LEN / 2);
-				arm_copy_f32(fft_in_buf_1, fft_in_buf, FHT_LEN);
-				break;
-			}
-			case 3:
-			{
-				State = 0;
-				arm_copy_f32(adc_buf, fft_in_buf_1, FHT_LEN / 2);
-				arm_copy_f32(adc_buf, &fft_in_buf_2[FHT_LEN / 2], FHT_LEN / 2);
-				arm_copy_f32(fft_in_buf_2, fft_in_buf, FHT_LEN);
-				break;
-			}
-			default:
-				break;
-			}
-
 			static portBASE_TYPE xHigherPriorityTaskWoken;
 			xHigherPriorityTaskWoken = pdFALSE;
 			/* Отдать семафор задаче-обработчику */
@@ -560,5 +663,76 @@ void SPI_DMAReceiveCplt_from_ADC(DMA_HandleTypeDef *hdma)
 				portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 			}
 		}
+	}
+}
+
+/************************************************************
+ *		Запуск таймера, дергающий АЦП с нужным периодом
+ ***********************************************************/
+void internalADC_Init()
+{
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc_buf, FHT_LEN / 2);	//Запуск ДМА от АЦП в память
+	HAL_TIM_Base_Start(&htim2);										//Запуск таймера для дискретизации
+}
+
+/**********************************************************/
+void internalADC_Deinit()
+{
+	HAL_ADC_Stop_DMA(&hadc1);	//Запуск ДМА от АЦП в память
+	HAL_TIM_Base_Stop_IT(&htim2);										//Запуск таймера для дискретизации
+}
+
+/**********************************************************/
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+	if (hadc->Instance == ADC1)
+	{
+		HAL_ADC_Start_DMA(&hadc1, (uint32_t*) raw_adc_data, FHT_LEN / 2);
+
+		for (uint16_t i = 0; i < FHT_LEN / 2; ++i)
+		{
+			adc_buf[i] = (float32_t) raw_adc_data[i];
+		}
+
+		static portBASE_TYPE xHigherPriorityTaskWoken;
+		xHigherPriorityTaskWoken = pdFALSE;
+		/* Отдать семафор задаче-обработчику */
+		xSemaphoreGiveFromISR(Semaph_data_ready, &xHigherPriorityTaskWoken);
+		if (xHigherPriorityTaskWoken != pdFALSE)
+		{
+			portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
+		}
+	}
+}
+
+/************************************************************
+ *		Запуск
+ ***********************************************************/
+void microphone_Init()
+{
+	HAL_I2S_Receive_DMA(&hi2s3, raw_adc_data, FHT_LEN);
+}
+
+/**********************************************************/
+void microphone_Deinit()
+{
+	HAL_I2S_DMAStop(&hi2s3);
+}
+
+void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s)
+{
+
+	for (uint16_t j = 0, i = 0; i < FHT_LEN / 2; i++, j = 4 * i)
+	{
+		adc_buf[i] = (float32_t) ((uint32_t) (raw_adc_data[j] << 8) | (raw_adc_data[j + 1] >> 8));		// - 8388608);
+	}
+
+	static portBASE_TYPE xHigherPriorityTaskWoken;
+	xHigherPriorityTaskWoken = pdFALSE;
+	/* Отдать семафор задаче-обработчику */
+	xSemaphoreGiveFromISR(Semaph_data_ready, &xHigherPriorityTaskWoken);
+	if (xHigherPriorityTaskWoken != pdFALSE)
+	{
+		portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 	}
 }
