@@ -1,5 +1,4 @@
-/* USER CODE BEGIN Header */
-/*
+/* USER CODE BEGIN Header
  *
  *  tim2 - trigger timer for all ADC (generates CS for external ADC on PWM pin)
  *	SPI1 - for display ST7789
@@ -19,7 +18,6 @@
 #include "i2s.h"
 #include "spi.h"
 #include "tim.h"
-#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -58,8 +56,7 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-//uint16_t raw_adc_data_1[1024*4];
-//uint32_t adc_data[1024];
+
 /* USER CODE END 0 */
 
 /**
@@ -92,19 +89,12 @@ int main(void)
   MX_DMA_Init();
   MX_TIM2_Init();
   MX_SPI1_Init();
-  MX_USART1_UART_Init();
   MX_SPI2_Init();
   MX_TIM4_Init();
   MX_TIM11_Init();
   MX_ADC1_Init();
   MX_I2S3_Init();
   /* USER CODE BEGIN 2 */
-
-//  HAL_I2S_Receive(&hi2s3, raw_adc_data_1, 512, 1000);
-//	if (HAL_I2S_Receive_DMA(&hi2s3, raw_adc_data_1, 1024*2) != HAL_OK) while (1)
-//	{
-//	}
-//	;
 
 	ST7789_Init(&hspi1);
 	RTOSstart();
@@ -175,24 +165,6 @@ int __io_putchar(int ch)
 	return ch;
 }
 
-//void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s)
-//{
-//	HAL_I2S_DMAStop(hi2s);
-//
-//	for (uint16_t j = 0, i = 0; i < 1024; i++, j = 4 * i)
-//	{
-//		adc_data[i] = (uint32_t) (raw_adc_data_1[j] << 8) | (raw_adc_data_1[j + 1] >> 8);
-//	}
-//
-//	flagg = 1;
-//	HAL_I2S_Receive_DMA(&hi2s3, (uint16_t*) raw_adc_data_1, 600);
-////	HAL_I2S_DMAStop(&hi2s);
-//}
-
-//void HAL_I2S_ErrorCallback(I2S_HandleTypeDef *hi2s)
-//{
-//	flagg = 15;
-//}
 /* USER CODE END 4 */
 
 /**
@@ -214,7 +186,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
 	if (htim->Instance == TIM11)
 	{
-//     HAL_IncTick();
 		ulHighFrequencyTimerTicks++;
 	}
   /* USER CODE END Callback 1 */

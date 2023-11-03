@@ -67,7 +67,8 @@ typedef enum {
 } st7789_Action;
 
 typedef enum {
-	OFF, ON
+	OFF,
+	ON
 } st7789_Mode;
 
 typedef enum {
@@ -110,9 +111,9 @@ void ST7789_DrawRect(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t co
 void ST7789_DrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, st7789_Action act);
 void ST7789_DrawCircleFilled(int16_t x0, int16_t y0, int16_t radius, uint16_t fillcolor, st7789_Action act);
 void ST7789_DrawCircle(int16_t x0, int16_t y0, int16_t radius, uint16_t color, st7789_Action act);
-void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act);
-void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act);
-void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act);
-void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act);
+void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act, uint16_t backgroundColor);
+void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act, uint16_t backgroundColor);
+void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act, uint16_t backgroundColor);
+void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act, uint16_t backgroundColor);
 
 #endif

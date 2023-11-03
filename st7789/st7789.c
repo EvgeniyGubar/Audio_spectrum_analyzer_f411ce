@@ -9,7 +9,8 @@ extern SPI_HandleTypeDef *hspi_lcd;
 
 uint16_t lcd_X_max, lcd_Y_max;
 
-uint16_t VRAM[ST7789_WIDTH * ST7789_HEIGHT] = { 0 };
+uint16_t VRAM[ST7789_WIDTH * ST7789_HEIGHT] =
+{ 0 };
 
 /**********************************************************************/
 void ST7789_Init(SPI_HandleTypeDef *hspi)
@@ -59,62 +60,63 @@ void ST7789_Orientation(st7789_Orientation State)
 	uint8_t data = 0;
 	ST7789_SendCmd(ST7789_Cmd_MADCTL);
 
-	switch (State) {
-	case Portrait_0:
+	switch (State)
 	{
-		data = 0;
-		lcd_Y_max = ST7789_HEIGHT;
-		lcd_X_max = ST7789_WIDTH;
-	}
+	case Portrait_0:
+		{
+			data = 0;
+			lcd_Y_max = ST7789_HEIGHT;
+			lcd_X_max = ST7789_WIDTH;
+		}
 		break;
 	case Album_90:
-	{
-		data = ST7789_MADCTL_MV | ST7789_MADCTL_MX;
-		lcd_Y_max = ST7789_WIDTH;
-		lcd_X_max = ST7789_HEIGHT;
-	}
+		{
+			data = ST7789_MADCTL_MV | ST7789_MADCTL_MX;
+			lcd_Y_max = ST7789_WIDTH;
+			lcd_X_max = ST7789_HEIGHT;
+		}
 		break;
 	case Portrait_180:
-	{
-		data = ST7789_MADCTL_MX | ST7789_MADCTL_MY;
-		lcd_Y_max = ST7789_HEIGHT;
-		lcd_X_max = ST7789_WIDTH;
-	}
+		{
+			data = ST7789_MADCTL_MX | ST7789_MADCTL_MY;
+			lcd_Y_max = ST7789_HEIGHT;
+			lcd_X_max = ST7789_WIDTH;
+		}
 		break;
 	case Album_270:
-	{
-		data = ST7789_MADCTL_MV | ST7789_MADCTL_MY;
-		lcd_Y_max = ST7789_WIDTH;
-		lcd_X_max = ST7789_HEIGHT;
-	}
+		{
+			data = ST7789_MADCTL_MV | ST7789_MADCTL_MY;
+			lcd_Y_max = ST7789_WIDTH;
+			lcd_X_max = ST7789_HEIGHT;
+		}
 		break;
 	case Portrait_0_Mirror:
-	{
-		data = ST7789_MADCTL_MX;
-		lcd_Y_max = ST7789_HEIGHT;
-		lcd_X_max = ST7789_WIDTH;
-	}
+		{
+			data = ST7789_MADCTL_MX;
+			lcd_Y_max = ST7789_HEIGHT;
+			lcd_X_max = ST7789_WIDTH;
+		}
 		break;
 	case Album_90_Mirror:
-	{
-		data = ST7789_MADCTL_MV | ST7789_MADCTL_MX | ST7789_MADCTL_MY;
-		lcd_Y_max = ST7789_WIDTH;
-		lcd_X_max = ST7789_HEIGHT;
-	}
+		{
+			data = ST7789_MADCTL_MV | ST7789_MADCTL_MX | ST7789_MADCTL_MY;
+			lcd_Y_max = ST7789_WIDTH;
+			lcd_X_max = ST7789_HEIGHT;
+		}
 		break;
 	case Portrait_180_Mirror:
-	{
-		data = ST7789_MADCTL_MY;
-		lcd_Y_max = ST7789_HEIGHT;
-		lcd_X_max = ST7789_WIDTH;
-	}
+		{
+			data = ST7789_MADCTL_MY;
+			lcd_Y_max = ST7789_HEIGHT;
+			lcd_X_max = ST7789_WIDTH;
+		}
 		break;
 	case Album_270_Mirror:
-	{
-		data = ST7789_MADCTL_MV;
-		lcd_Y_max = ST7789_WIDTH;
-		lcd_X_max = ST7789_HEIGHT;
-	}
+		{
+			data = ST7789_MADCTL_MV;
+			lcd_Y_max = ST7789_WIDTH;
+			lcd_X_max = ST7789_HEIGHT;
+		}
 		break;
 	default:
 		break;
@@ -362,9 +364,9 @@ void ST7789_DrawCircle(int16_t x0, int16_t y0, int16_t radius, uint16_t color, s
 }
 
 /**********************************************************************/
-void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act)
+void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act, uint16_t backgroundColor)
 {
-	if ((x >= lcd_X_max) || (y >= lcd_Y_max) || ((x + 4) < 0) || ((y + 7) < 0)) return;
+//	if ((x >= lcd_X_max) || (y >= lcd_Y_max) || ((x + 4) < 0) || ((y + 7) < 0)) return;
 
 	if (c < 128) c = c - 32;
 	if (c >= 144 && c <= 175) c = c - 48;
@@ -381,26 +383,24 @@ void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char
 
 		for (uint8_t j = 0; j < 8; j++)
 		{
-			if (coloumn & 0x01)
+			switch (Rotate)
 			{
-				switch (Rotate) {
-				case Normal:
+			case Normal:
 				{
-					ST7789_SavePixel(x + i, y + j, TextColor);
+					ST7789_SavePixel(x + i, y + j, (coloumn & 0x01) ? TextColor : backgroundColor);
 				}
-					break;
+				break;
 
-				case Left:
-				{
-
-				}
-					break;
-				case Right:
+			case Left:
 				{
 
 				}
-					break;
+				break;
+			case Right:
+				{
+					ST7789_SavePixel(lcd_X_max - (y + j), x + i, (coloumn & 0x01) ? TextColor : backgroundColor);
 				}
+				break;
 			}
 			coloumn >>= 1;
 		}
@@ -410,11 +410,11 @@ void ST7789_DrawChar_5x8(int16_t x, int16_t y, uint16_t TextColor, unsigned char
 }
 
 /**********************************************************************/
-void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act)
+void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned char c, st7789_Rotate Rotate, st7789_Action act, uint16_t backgroundColor)
 {
 	uint8_t buffer[11];
 
-	if ((x >= lcd_X_max) || (y >= lcd_Y_max) || ((x + 7) < 0) || ((y + 11) < 0)) return;
+//	if ((x >= lcd_X_max) || (y >= lcd_Y_max) || ((x + 7) < 0) || ((y + 11) < 0)) return;
 
 	if (c < 128) c = c - 32;
 	if (c >= 144 && c <= 175) c = c - 48;
@@ -429,33 +429,24 @@ void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned cha
 	{
 		for (uint8_t i = 0; i < 7; i++)
 		{
-			if ((buffer[j] & (1 << i)) != 0)
+			switch (Rotate)
 			{
-
-				switch (Rotate) {
-				case Normal:
+			case Normal:
 				{
-					ST7789_SavePixel(x + i, y + j, TextColor);
+					ST7789_SavePixel(x + i, y + j, (buffer[j] & (1 << i)) ? TextColor : backgroundColor);
 					break;
 				}
 
-				case Left:
+			case Left:
 				{
 
 					break;
 				}
-				case Right:
+			case Right:
 				{
-//					lcd_X_max, lcd_Y_max
-
-
-
-					ST7789_SavePixel(lcd_X_max - (y + j), x + i, TextColor);
-
-//					ST7789_SavePixel(x + i, y + j, TextColor);
-					break;
+					ST7789_SavePixel(lcd_X_max - (y + j), x + i, (buffer[j] & (1 << i)) ? TextColor : backgroundColor);
 				}
-				}
+				break;
 			}
 		}
 	}
@@ -464,7 +455,7 @@ void ST7789_DrawChar_7x11(int16_t x, int16_t y, uint16_t TextColor, unsigned cha
 }
 
 /**********************************************************************/
-void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act)
+void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act, uint16_t backgroundColor)
 {
 	int16_t x0 = x, y0 = y;
 	unsigned char type = *str;
@@ -472,7 +463,7 @@ void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, st
 	if (type >= 128) x = x - 3;
 	while (*str)
 	{
-		ST7789_DrawChar_5x8(x, y, TextColor, *str++, Rotate, updateVRAM);
+		ST7789_DrawChar_5x8(x, y, TextColor, *str++, Rotate, updateVRAM, backgroundColor);
 		type = *str;
 		if (type >= 128) x = x + 3;
 		else x = x + 6;
@@ -483,7 +474,7 @@ void ST7789_DrawText_5x8(int16_t x, int16_t y, uint16_t TextColor, char *str, st
 }
 
 /**********************************************************************/
-void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act)
+void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, st7789_Rotate Rotate, st7789_Action act, uint16_t backgroundColor)
 {
 	int16_t x0 = x, y0 = y;
 	unsigned char type = *str;
@@ -491,7 +482,7 @@ void ST7789_DrawText_7x11(int16_t x, int16_t y, uint16_t TextColor, char *str, s
 	if (type >= 128) x = x - 3;
 	while (*str)
 	{
-		ST7789_DrawChar_7x11(x, y, TextColor, *str++, Rotate, updateVRAM);
+		ST7789_DrawChar_7x11(x, y, TextColor, *str++, Rotate, updateVRAM, backgroundColor);
 		type = *str;
 		if (type >= 128) x = x + 4;
 		else x = x + 8;
